@@ -19,6 +19,7 @@ from app.models import (
     VerifyPaymentInput,
 )
 from app import x402_services
+from app.ops_events import emit_tool_event
 
 mcp = FastMCP(
     "x402-micropayments",
@@ -32,6 +33,7 @@ mcp = FastMCP(
 
 
 async def _execute_tool(
+    tool_name: str,
     agent_id: str | None,
     work: Callable[[str], Awaitable[dict[str, Any]]],
 ) -> str:
@@ -43,7 +45,9 @@ async def _execute_tool(
         return json.dumps({"error": exc.detail, "data": None, "meta": None}, indent=2)
 
     data = await work(resolved)
-    payload = ToolResponse(data=data, meta=quota_store.build_meta(snapshot))
+    meta = quota_store.build_meta(snapshot)
+    emit_tool_event(tool_name, resolved, meta.model_dump())
+    payload = ToolResponse(data=data, meta=meta)
     return json.dumps(payload.model_dump(), indent=2)
 
 
@@ -59,7 +63,7 @@ async def discover_services(
         query=query, limit=limit, max_price_usdc=max_price_usdc
     )
     return await _execute_tool(
-        agent_id, lambda _: x402_services.discover_services(params)
+        "discover_services", agent_id, lambda _: x402_services.discover_services(params)
     )
 
 
@@ -75,7 +79,9 @@ async def get_payment_requirements(
         url=url, method=method, headers=headers or {}
     )
     return await _execute_tool(
-        agent_id, lambda _: x402_services.get_payment_requirements(params)
+        "get_payment_requirements",
+        agent_id,
+        lambda _: x402_services.get_payment_requirements(params),
     )
 
 
@@ -96,7 +102,9 @@ async def pay_and_fetch(
         body=body,
         preferred_network=preferred_network,
     )
-    return await _execute_tool(agent_id, lambda _: x402_services.pay_and_fetch(params))
+    return await _execute_tool(
+        "pay_and_fetch", agent_id, lambda _: x402_services.pay_and_fetch(params)
+    )
 
 
 @mcp.tool()
@@ -117,6 +125,7 @@ async def build_seller_requirements(
         description=description,
     )
     return await _execute_tool(
+        "build_seller_requirements",
         agent_id,
         lambda _: _sync_result(x402_services.build_seller_requirements(params)),
     )
@@ -134,7 +143,9 @@ async def verify_payment_payload(
         payment_required=payment_required,
     )
     return await _execute_tool(
-        agent_id, lambda _: x402_services.verify_payment_payload(params)
+        "verify_payment_payload",
+        agent_id,
+        lambda _: x402_services.verify_payment_payload(params),
     )
 
 
@@ -142,6 +153,7 @@ async def verify_payment_payload(
 async def get_supported_networks(agent_id: str | None = None) -> str:
     """List networks, facilitators, and v2 headers via x402 SDK."""
     return await _execute_tool(
+        "get_supported_networks",
         agent_id,
         lambda _: _sync_result(x402_services.get_supported_networks().model_dump()),
     )
@@ -151,6 +163,7 @@ async def get_supported_networks(agent_id: str | None = None) -> str:
 async def get_pro_upgrade_requirements(agent_id: str | None = None) -> str:
     """Build x402 payment requirements to purchase Pro tier (revenue collection)."""
     return await _execute_tool(
+        "get_pro_upgrade_requirements",
         agent_id,
         lambda resolved: _sync_result(
             x402_services.build_pro_upgrade_requirements(resolved)
@@ -166,6 +179,7 @@ async def activate_pro_tier(
 ) -> str:
     """Verify pro-tier x402 payment and unlock Pro quota limits."""
     return await _execute_tool(
+        "activate_pro_tier",
         agent_id,
         lambda resolved: x402_services.activate_pro_tier(
             payment_signature, payment_required, resolved
@@ -182,6 +196,7 @@ async def get_tool_credits_requirements(
     pack = credits or settings.tool_credit_pack_size
 
     return await _execute_tool(
+        "get_tool_credits_requirements",
         agent_id,
         lambda resolved: _sync_result(
             x402_services.build_tool_credits_requirements(resolved, pack)
@@ -200,6 +215,7 @@ async def purchase_tool_credits(
     pack = credits or settings.tool_credit_pack_size
 
     return await _execute_tool(
+        "purchase_tool_credits",
         agent_id,
         lambda resolved: x402_services.purchase_tool_credits(
             payment_signature, payment_required, resolved, pack

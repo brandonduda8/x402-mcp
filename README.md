@@ -12,31 +12,27 @@ Production MCP server for the [x402](https://x402.org) HTTP micropayment protoco
 
 ## Quick Start
 
-**Full walkthrough:** [docs/SETUP.md](docs/SETUP.md) — install, wallet/profit config, Cursor MCP, HTTP microservice, and testing.
+```bash
+cp .env.example .env              # 1. Configure
+cd dashboard && pnpm install      # 2. Install dashboard
+cd .. && make up                  # 3. Launch
+```
+
+The setup wizard opens automatically with failing checks and copy-paste fixes.
+Demo mode (header toggle) populates every panel with zero configuration.
+
+**Full walkthrough:** [docs/SETUP.md](docs/SETUP.md) — wallet/profit config, Cursor MCP, HTTP microservice, and testing.
+
+### Docker
 
 ```bash
-cd x402-mcp
-python -m venv .venv
-.venv\Scripts\activate   # Windows
-pip install -r requirements.txt
-cp .env.example .env
-# Set X402_PAY_TO_ADDRESS to your wallet (profits destination)
+docker compose up
 ```
 
 ### Local stdio (Cursor)
 
 ```bash
 python run_stdio.py
-```
-
-Add to Cursor MCP config (`manifests/cursor-mcp.json`).
-
-### HTTP server
-
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8402
-curl http://localhost:8402/.well-known/mcp
-curl http://localhost:8402/health
 ```
 
 ## MCP Tools
@@ -89,6 +85,16 @@ pytest -v
 ```
 
 See [docs/SETUP.md](docs/SETUP.md#step-7--test-without-surprises) for expected vs unexpected errors (wallet tools fail clearly until `.env` is configured).
+
+## Mission Control Dashboard
+
+Fintech-terminal ops dashboard at `http://localhost:5173`. Net position, quota gauge, rate sparkline, activity stream, agent lanes, spend/revenue ledgers (with BaseScan links), 402 Inspector, wallet panel, first-run wizard, and mission progress tracker. Three density modes (Guided/Standard/Operator). `cmd+K` command palette.
+
+API surface: `GET /stats`, `GET /events` (SSE with 15s heartbeat), `GET /ledger/{spend|revenue}`, `GET /doctor`, `GET /probe`, `GET /wallet`, `POST /seller/requirements`.
+
+## Agent Ops
+
+Cost-effective multi-agent operating group (scout, warden, treasurer, archivist, merchant) with budget policy and ledger. See [docs/agent-ops.md](docs/agent-ops.md).
 
 ## Docker
 

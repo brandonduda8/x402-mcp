@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     svm_private_key: str | None = None
 
     x402_pay_to_address: str | None = None
+
+    # Dashboard actions: gated POST endpoints (seller wizard).
+    dashboard_actions: bool = False
     x402_facilitator_url: str = "https://x402.org/facilitator"
     x402_default_network: str = "eip155:84532"
     x402_default_price: str = "$0.01"

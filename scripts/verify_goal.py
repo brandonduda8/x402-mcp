@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRATCH = Path(
     os.environ.get(
         "GOAL_SCRATCH",
-        r"C:\Users\Keith\AppData\Local\Temp\grok-goal-ba9a3e4905ee\implementer",
+        r"C:\Users\Keith\AppData\Local\Temp\grok-goal-20a84fe0f953\implementer",
     )
 )
 PYTHON = ROOT / ".venv" / "Scripts" / "python.exe"
@@ -64,6 +64,8 @@ def run_launch_check() -> int:
             health = httpx.get("http://127.0.0.1:8402/health", timeout=10)
             manifest = httpx.get("http://127.0.0.1:8402/.well-known/mcp", timeout=10)
             upgrade = httpx.get("http://127.0.0.1:8402/upgrade", timeout=10)
+            stats = httpx.get("http://127.0.0.1:8402/stats", timeout=10)
+            ledger = httpx.get("http://127.0.0.1:8402/ledger/spend", timeout=10)
             lines.append(f"=== boot {boot} ===")
             lines.append(f"health_status={health.status_code}")
             lines.append(f"health_body={health.text}")
@@ -71,6 +73,10 @@ def run_launch_check() -> int:
             lines.append(f"manifest_body={manifest.text}")
             lines.append(f"upgrade_status={upgrade.status_code}")
             lines.append(f"upgrade_body={upgrade.text}")
+            lines.append(f"stats_status={stats.status_code}")
+            lines.append(f"stats_body={stats.text}")
+            lines.append(f"ledger_spend_status={ledger.status_code}")
+            lines.append(f"ledger_spend_body={ledger.text}")
         finally:
             proc.terminate()
             try:
@@ -80,12 +86,83 @@ def run_launch_check() -> int:
 
     log.write_text("\n".join(lines), encoding="utf-8")
     joined = "".join(lines)
+    ledger_array_ok = False
+    for line in lines:
+        if line.startswith("ledger_spend_body="):
+            try:
+                ledger_array_ok = isinstance(json.loads(line.split("=", 1)[1]), list)
+            except json.JSONDecodeError:
+                ledger_array_ok = False
+            break
+
     ok = (
         "status" in joined
         and "x402-micropayments" in joined
         and "upgrade_status=200" in joined
+        and "stats_status=200" in joined
+        and "ledger_spend_status=200" in joined
+        and ledger_array_ok
     )
     return 0 if ok else 1
+
+
+async def run_ops_smoke() -> int:
+    """Tool call + stats delta for mission-control ops."""
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    sys.path.insert(0, str(ROOT))
+    from app.commerce import InMemoryQuotaStore
+    from app.mcp_server import get_supported_networks
+
+    store = InMemoryQuotaStore()
+    import app.mcp_server as mcp_server
+
+    mcp_server.quota_store = store
+    import app.main as main_mod
+
+    main_mod.quota_store = store
+
+    agent = "ops-smoke-agent"
+    before = store.peek(agent)
+    raw = await get_supported_networks(agent_id=agent)
+    after = store.peek(agent)
+    stats = store.snapshot()
+
+    out = SCRATCH / "ops_smoke.json"
+    out.write_text(
+        json.dumps(
+            {
+                "tool_response": json.loads(raw),
+                "before_calls": before.calls_this_month,
+                "after_calls": after.calls_this_month,
+                "stats_agents": stats["agents"],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    ok = after.calls_this_month > before.calls_this_month
+    return 0 if ok else 1
+
+
+def run_agent_ops_artifact_list() -> int:
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    agents = ROOT / ".claude" / "agents"
+    lines = [
+        str(p.relative_to(ROOT))
+        for p in sorted(agents.glob("x402-*.md"))
+    ]
+    lines.extend(
+        [
+            "ledger/policy.json",
+            "docs/agent-ops.md",
+            "docs/UI-HANDOFF.md",
+            ".mcp.json.example",
+        ]
+    )
+    (SCRATCH / "agent_ops_artifacts.txt").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+    return 0 if len(list(agents.glob("x402-*.md"))) == 5 else 1
 
 
 async def run_tool_smoke() -> int:
@@ -230,8 +307,11 @@ def main() -> int:
     codes = []
     codes.append(run_pytest())
     codes.append(run_launch_check())
+    codes.append(run_agent_ops_artifact_list())
+    codes.append(asyncio.run(run_ops_smoke()))
     codes.append(asyncio.run(run_tool_smoke()))
     codes.append(asyncio.run(run_stdio_smoke()))
+    # indices shift: stdio_smoke is codes[5] after append above
     asyncio.run(run_pro_stdio_evidence())
     pro_id_ok = _stdio_pro_agent_id_ok()
     run_pay_fetch_evidence()
@@ -242,8 +322,10 @@ def main() -> int:
             [
                 f"pytest={codes[0]}",
                 f"launch={codes[1]}",
-                f"tool_smoke={codes[2]}",
-                f"stdio_smoke={codes[3]}",
+                f"agent_ops_artifacts={codes[2]}",
+                f"ops_smoke={codes[3]}",
+                f"tool_smoke={codes[4]}",
+                f"stdio_smoke={codes[5]}",
                 f"stdio_pro_agent_id_match={0 if pro_id_ok else 1}",
             ]
         )

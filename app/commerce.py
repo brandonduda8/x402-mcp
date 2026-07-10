@@ -181,6 +181,51 @@ class InMemoryQuotaStore:
             next_month = datetime(now.year, now.month + 1, 1, tzinfo=UTC)
         return max(int((next_month - now).total_seconds()), 1)
 
+    def snapshot(self) -> dict:
+        """Public aggregate for GET /stats — no private field access from routes."""
+        agent_ids: set[str] = set()
+        agent_ids.update(self._tiers)
+        agent_ids.update(self._credits)
+        agent_ids.update(self._windows)
+        for key in self._monthly:
+            agent_ids.add(key.rsplit(":", 1)[0])
+        agent_ids.update(self._agent_ids.values())
+
+        agents = []
+        for agent_id in sorted(agent_ids):
+            snap = self.peek(agent_id)
+            agents.append(
+                {
+                    "agent_id": snap.agent_id,
+                    "tier": snap.tier,
+                    "calls_this_month": snap.calls_this_month,
+                    "quota_remaining": snap.quota_remaining,
+                    "quota_warning": snap.quota_warning,
+                    "rate_limit_remaining": snap.rate_limit_remaining,
+                    "tool_credits_remaining": snap.tool_credits_remaining,
+                }
+            )
+
+        return {
+            "agents": agents,
+            "config": {
+                "has_pay_to": bool(settings.x402_pay_to_address),
+                "has_buyer_key": bool(settings.evm_private_key),
+                "redis_mode": "redis" if settings.redis_url else "memory",
+                "network": settings.x402_default_network,
+                "free_tier_monthly_quota": settings.free_tier_monthly_quota,
+                "free_tier_rate_limit_per_min": settings.free_tier_rate_limit_per_min,
+                "pro_tier_monthly_quota": settings.pro_tier_monthly_quota,
+                "pro_tier_rate_limit_per_min": settings.pro_tier_rate_limit_per_min,
+                "pro_tier_price": settings.pro_tier_price,
+                "tool_credit_pack_size": settings.tool_credit_pack_size,
+                "tool_credit_pack_price": settings.tool_credit_pack_price,
+                "x402_default_network": settings.x402_default_network,
+                "x402_default_price": settings.x402_default_price,
+                "dashboard_actions": settings.dashboard_actions,
+            },
+        }
+
     def peek(self, agent_id: str) -> QuotaSnapshot:
         now = time.time()
         self._prune_window(agent_id, now)
