@@ -144,5 +144,12 @@ class Settings(BaseSettings):
     )
     mn_property_check_price: str = "$0.01"
 
+    # Middleware pilot (app/x402_middleware_pilot.py): a standalone route gated
+    # via the x402 SDK's own FastAPI middleware (x402.http.middleware.fastapi)
+    # instead of this repo's hand-rolled challenge/verify/settle path. Purely
+    # additive — does not touch Pulse/tx-decision/mn-property-check. Priced
+    # nominally since it exists to prove the integration, not to sell.
+    middleware_pilot_price: str = "$0.001"
+
 
 settings = Settings()

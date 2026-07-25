@@ -110,6 +110,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Standalone pilot of the x402 SDK's own FastAPI payment middleware — see
+# app/x402_middleware_pilot.py. Purely additive: only GET /pilot/ping is
+# gated, every other route is unaffected.
+from app import x402_middleware_pilot  # noqa: E402
+
+x402_middleware_pilot.register(app)
+
 
 class SellerRequirementsRequest(BaseModel):
     network: str = "eip155:84532"
