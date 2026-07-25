@@ -120,6 +120,11 @@ class Settings(BaseSettings):
     swarm_allow_paid_inputs: bool = False
     # Comma-separated fallback upstream x402 URLs used when Bazaar discovery is empty.
     swarm_upstream_urls: str = ""
+    # Comma-separated wallet addresses the operator settles from (cataloging,
+    # re-indexing, seed purchases). Lets the dashboard/ledger tell a real
+    # external sale apart from the operator paying itself — revenue rows are
+    # otherwise indistinguishable by amount or agent_id alone.
+    operator_wallets: str = ""
     swarm_target_ltv_cac: float = 3.0  # target revenue/cost ratio; also the min pricing multiple
     swarm_min_margin_ratio: float = 0.5  # floor on margin/price
     # Network the merchant lists composites on. Must be one the seller facilitator

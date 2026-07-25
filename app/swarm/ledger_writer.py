@@ -73,8 +73,16 @@ def record_revenue(
     run_id: str | None = None,
     tx: str | None = None,
     settled: bool = True,
+    payer: str | None = None,
 ) -> dict[str, Any]:
-    """Record a realized composite sale (sell side / revenue)."""
+    """Record a realized composite sale (sell side / revenue).
+
+    `payer` is the buyer's wallet address from the facilitator's settle
+    response (`SettleResponse.payer`) when available — it's what lets a real
+    external sale be told apart from the operator settling against its own
+    listing, which `agent_id` cannot do (it's a seller/product label, not a
+    buyer identity).
+    """
     row = {
         "ts": datetime.now(UTC).isoformat(),
         "kind": "revenue",
@@ -86,5 +94,6 @@ def record_revenue(
         "settled": settled,
         "product_id": product_id,
         "run_id": run_id,
+        "payer": payer.lower() if payer else None,
     }
     return _append("revenue", row)

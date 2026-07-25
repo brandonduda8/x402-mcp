@@ -49,6 +49,7 @@ def test_storefront_panel_is_rendered() -> None:
     html = client.get("/dashboard").text
     for element_id in (
         "s-revenue",
+        "s-external",
         "s-spend",
         "s-listed",
         "store-body",

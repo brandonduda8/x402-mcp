@@ -53,6 +53,12 @@ services:
       # this value — it is the id that is already in the catalog.
       - key: PINNED_PULSE_PRODUCT_ID
         value: "d22bbf5f3c4b4666a6f80980c7bc7c50"
+      # Public wallet address the operator settles from (cataloging, re-indexing,
+      # seed purchases) — NOT a secret, just a receive/settle address, safe to
+      # commit. Lets /ledger/revenue and the dashboard tell a real external sale
+      # apart from the operator paying itself.
+      - key: OPERATOR_WALLETS
+        value: "0x67ffc9B439aE24B0f7C7cA837C4AdfAFA06F9d38"
       # --- seller-only posture ---
       - key: SWARM_ENABLED
         value: "false"        # no buyer role on a public box

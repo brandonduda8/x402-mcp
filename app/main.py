@@ -296,8 +296,28 @@ async def seller_requirements(body: SellerRequirementsRequest) -> dict:
 
 @app.get("/ledger/{name}")
 async def ledger_rows(name: Literal["spend", "revenue"]) -> list[dict]:
-    """Agent-ops spend/revenue ledger (newest first, max 1000)."""
-    return read_ledger_rows(name)
+    """Agent-ops spend/revenue ledger (newest first, max 1000).
+
+    Revenue rows are annotated with `is_operator_settle`: True when the row's
+    `payer` matches a configured operator wallet (cataloging/re-indexing, not
+    a customer), False when it's a different wallet (a real external sale),
+    and None when `payer` is missing — rows written before this field existed,
+    or a settlement whose facilitator didn't report one. Treat None as
+    "unknown", never as "external": most of this project's revenue history is
+    self-settled, and the honest default is not to overclaim a sale.
+    """
+    rows = read_ledger_rows(name)
+    if name != "revenue":
+        return rows
+    operator_wallets = {
+        w.strip().lower() for w in settings.operator_wallets.split(",") if w.strip()
+    }
+    for row in rows:
+        payer = row.get("payer")
+        row["is_operator_settle"] = (
+            (payer.lower() in operator_wallets) if (payer and operator_wallets) else None
+        )
+    return rows
 
 
 @app.get("/swarm/runs")
@@ -643,6 +663,7 @@ async def mn_property_check(request: Request, address: str) -> JSONResponse:
             network=settings.x402_default_network,
             product_id="mn-property-check",
             tx=str(tx) if tx else None,
+            payer=settlement.get("payer"),
         )
     except Exception:  # ledger write must never break paid delivery
         log.warning("mn/property-check revenue ledger write failed", exc_info=True)
@@ -760,6 +781,7 @@ async def base_tx_decision(
             network=settings.x402_default_network,
             product_id="base-tx-decision",
             tx=str(tx) if tx else None,
+            payer=settlement.get("payer"),
         )
     except Exception:  # ledger write must never break paid delivery
         log.warning("base/tx-decision revenue ledger write failed", exc_info=True)

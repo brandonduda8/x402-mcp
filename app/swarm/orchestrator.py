@@ -287,6 +287,7 @@ async def settle_composite_sale(
         run_id=product.run_id,
         tx=str(tx) if tx else None,
         settled=True,
+        payer=settlement.get("payer") if isinstance(settlement, dict) else None,
     )
     # Attribute realized revenue back to the sources that fed the composite.
     sources = product.sources or []

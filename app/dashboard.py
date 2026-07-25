@@ -218,6 +218,7 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
     <h2>Storefront <span class="count" id="store-count"></span></h2>
     <dl>
       <dt>realized revenue</dt><dd id="s-revenue">—</dd>
+      <dt>from real buyers</dt><dd id="s-external">—</dd>
       <dt>upstream spend</dt><dd id="s-spend">—</dd>
       <dt>listings</dt><dd id="s-listed">—</dd>
     </dl>
@@ -226,8 +227,8 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
       <tbody id="store-body"><tr><td class="env" colspan="3">Loading listings…</td></tr></tbody>
     </table>
     <table>
-      <thead><tr><th>Settled sale</th><th>Amount</th><th>Tx</th></tr></thead>
-      <tbody id="sales-body"><tr><td class="env" colspan="3">Loading sales…</td></tr></tbody>
+      <thead><tr><th>Settled sale</th><th>Amount</th><th>Payer</th><th>Tx</th></tr></thead>
+      <tbody id="sales-body"><tr><td class="env" colspan="4">Loading sales…</td></tr></tbody>
     </table>
     <table>
       <thead><tr><th>Demand (402s served)</th><th>Views</th><th>Sold in window</th></tr></thead>
@@ -401,6 +402,14 @@ async function pollStore(){
     ]);
 
     $("s-revenue").textContent = usd(report.total_revenue_usdc);
+    /* is_operator_settle: true = the operator paying itself (cataloging,
+       re-indexing) — not demand. false = a different wallet paid — a real
+       sale. null/undefined = payer unknown (row predates this field, or no
+       OPERATOR_WALLETS configured) — counted as neither, not assumed real. */
+    const externalUsdc = sales
+      .filter(s => s.is_operator_settle === false)
+      .reduce((sum, s) => sum + Number(s.amount_usdc || 0), 0);
+    $("s-external").textContent = usd(externalUsdc);
     $("s-spend").textContent = usd(report.total_spend_usdc);
     $("s-listed").textContent = `${report.listed_count} listed · ${report.sold_count} sold`;
     $("store-count").textContent = `· ${products.length}`;
@@ -412,12 +421,19 @@ async function pollStore(){
         <td>${p.revenue_usdc ? usd(p.revenue_usdc) : "—"}</td>
       </tr>`).join("") : `<tr><td class="env" colspan="3">nothing listed</td></tr>`;
 
+    const payerBadge = (s) => s.is_operator_settle === true
+      ? `<span class="env">self-settle</span>`
+      : s.is_operator_settle === false
+        ? `<span class="ok">external ✓</span>`
+        : `<span class="env">—</span>`;
+
     $("sales-body").innerHTML = sales.length ? sales.slice(0, 8).map(s => `
       <tr>
         <td class="tool">${s.ts.slice(0, 19).replace("T", " ")} · ${s.product_id || "—"}</td>
         <td>${usd(s.amount_usdc)}</td>
+        <td>${payerBadge(s)}</td>
         <td class="env">${s.tx ? s.tx.slice(0, 10) + "…" : "—"}</td>
-      </tr>`).join("") : `<tr><td class="env" colspan="3">no settled sales yet</td></tr>`;
+      </tr>`).join("") : `<tr><td class="env" colspan="4">no settled sales yet</td></tr>`;
 
     /* Views with no sales is a price/product signal; zero views is a discovery
        signal. Showing both stops those two being read as the same thing. */
