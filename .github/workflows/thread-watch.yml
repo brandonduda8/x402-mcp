@@ -27,7 +27,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       SELF_REPO: ${{ github.repository }}
       # Threads to watch: "owner/repo:kind:number". kind is pr or issue.
-      THREADS: 'BankrBot/skills:pr:588 BlockRunAI/ClawRouter:issue:216'
+      # ClawRouter#216 removed 2026-07-25: we closed it ourselves after pivoting
+      # to a direct email (see ClawRouter outreach email reply watch routine).
+      THREADS: 'BankrBot/skills:pr:588 Haustorium12/gold-402:pr:58'
       # Our own GitHub login — comments BY us are not events to alert on.
       OUR_LOGIN: kwizzlesurp10-ctrl
     steps:
