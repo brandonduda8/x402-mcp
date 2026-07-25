@@ -60,6 +60,19 @@ def paid_resources() -> list[dict[str, Any]]:
             "flag for a Minneapolis street address, from city open data.",
             "params": {"address": "street address string, 1-120 chars (required)"},
         },
+        {
+            "url": f"{base}/base/finality-check",
+            "method": "GET",
+            "price": settings.finality_check_price,
+            "network": settings.x402_default_network,
+            "name": "Base transaction finality check",
+            "what": "Classify a Base mainnet tx hash as not_found, pending, "
+            "unsafe (sequencer-confirmed only), safe (L1-attested), or "
+            "finalized (L1-finalized) -- read from the node's own safe/"
+            "finalized block tags, not a modeled probability. Call after "
+            "submitting a tx, when tx-decision answers the question before.",
+            "params": {"tx": "0x-prefixed 32-byte transaction hash (required)"},
+        },
     ]
 
 
@@ -122,6 +135,13 @@ def llms_txt() -> str:
         "- **Delivery is settled-gated**: content is served only after on-chain",
         "  settlement succeeds, so a verified-but-unsettled payment gets a 402,",
         "  not the product.",
+        "- **finality-check is gated by the x402 SDK's own middleware, not this",
+        "  repo's hand-rolled path**: a malformed `tx` still returns 402 (not",
+        "  422) if unpaid, since payment gating runs before query validation;",
+        "  paid-but-malformed still safely fails closed (no settlement) but as a",
+        "  422 after verification, not before it. Its revenue also isn't yet",
+        "  mirrored into this repo's own ledger/dashboard -- Base mainnet is the",
+        "  source of truth for this one endpoint until that gap closes.",
         "",
         "## Machine surfaces",
         "",

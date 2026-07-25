@@ -151,5 +151,12 @@ class Settings(BaseSettings):
     # nominally since it exists to prove the integration, not to sell.
     middleware_pilot_price: str = "$0.001"
 
+    # Base transaction finality check (app/finality_check.py) -- the first real
+    # paid product gated via the middleware pilot rather than a hand-rolled
+    # challenge/verify/settle path. Priced like /base/tx-decision: a cheap
+    # loop-resident call, this time for after a tx is submitted rather than
+    # before.
+    finality_check_price: str = "$0.01"
+
 
 settings = Settings()

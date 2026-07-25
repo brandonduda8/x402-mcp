@@ -42,6 +42,35 @@ def test_existing_routes_are_unaffected() -> None:
     assert client.get("/.well-known/mcp").status_code == 200
 
 
+VALID_TX = "0x" + "a" * 64
+
+
+def test_unpaid_finality_check_returns_402_with_correct_price() -> None:
+    response = client.get("/base/finality-check", params={"tx": VALID_TX})
+    assert response.status_code == 402
+    decoded = json.loads(base64.b64decode(response.headers["payment-required"]))
+    accept = decoded["accepts"][0]
+    assert accept["network"] == settings.x402_default_network
+    assert accept["payTo"].lower() == settings.x402_pay_to_address.lower()
+    # $0.01 -> 10000 atomic units of 6-decimal USDC.
+    assert accept["amount"] == "10000"
+
+
+def test_finality_check_402_carries_bazaar_discovery_extension() -> None:
+    response = client.get("/base/finality-check", params={"tx": VALID_TX})
+    decoded = json.loads(base64.b64decode(response.headers["payment-required"]))
+    assert "bazaar" in decoded.get("extensions", {})
+
+
+def test_malformed_tx_is_still_gated_before_route_validation_runs() -> None:
+    """Payment gating happens at the ASGI layer, before FastAPI's own query
+    validation -- an unpaid request with a bad `tx` still gets the 402
+    challenge, not a 422. The 422-without-charge property is enforced later,
+    inside call_next, once a payment has actually been verified."""
+    response = client.get("/base/finality-check", params={"tx": "not-a-hash"})
+    assert response.status_code == 402
+
+
 def test_mn_property_check_still_uses_its_own_hand_rolled_path() -> None:
     """Guards the "own section, don't touch current code" boundary: the
     generic middleware must not intercept a route it wasn't given."""
