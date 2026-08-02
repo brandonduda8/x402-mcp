@@ -44,6 +44,20 @@ def test_dashboard_endpoints_it_polls_are_live() -> None:
     assert client.get("/ledger/revenue").status_code == 200
 
 
+def test_upgrade_field_names_match_the_api() -> None:
+    """The tool-credits panel rendered "undefined → undefined" in production
+    because it read tc.payment_tool / tc.purchase_tool while /upgrade returns
+    x402_payment_tool / x402_purchase_tool. Pin the names to the live payload
+    so a rename on either side fails here instead of silently on the page."""
+    payload = client.get("/upgrade").json()["tool_credits"]
+    html = client.get("/dashboard").text
+    for field in ("pack_size", "pack_price", "x402_payment_tool", "x402_purchase_tool"):
+        assert field in payload, f"/upgrade no longer returns {field}"
+        assert f"tc.{field}" in html, f"dashboard does not read tc.{field}"
+    assert "tc.payment_tool" not in html
+    assert "tc.purchase_tool}" not in html
+
+
 def test_registered_agents_panel_is_rendered() -> None:
     """The quota panel's agent picker needs its ids and the /stats poller."""
     html = client.get("/dashboard").text

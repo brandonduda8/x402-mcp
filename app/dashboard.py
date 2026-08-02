@@ -576,7 +576,7 @@ async function loadUpgrade(){
     $("r-credit-price").firstChild.textContent = tc.pack_price;
     $("r-credit-list").innerHTML =
       `<li><b>${tc.pack_size}</b> credits per pack</li>` +
-      `<li>tools: <b>${tc.payment_tool} → ${tc.purchase_tool}</b></li>`;
+      `<li>tools: <b>${tc.x402_payment_tool} → ${tc.x402_purchase_tool}</b></li>`;
   }catch(e){ tape("err", e.message); }
 }
 
