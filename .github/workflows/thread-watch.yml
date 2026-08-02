@@ -80,12 +80,30 @@ jobs:
               d = json.loads(raw)
               url = d.get("url", "")
 
-              # 1) New comments from anyone who is not us.
-              for c in d.get("comments", []):
-                  who = (c.get("author") or {}).get("login", "")
+              # 1) New comments from anyone who is not us, and not a bot.
+              #
+              # Read comments through the REST endpoint rather than `gh pr view`:
+              # only REST carries `user.type`, and `gh pr view` strips the
+              # `[bot]` suffix from the login, so a review bot is otherwise
+              # indistinguishable from a maintainer. The first alert this
+              # watcher ever raised was a Codex bot reporting its own usage
+              # limits — real, correctly detected, and worth nobody's attention.
+              raw_comments = gh(["api", f"repos/{repo}/issues/{number}/comments",
+                                 "--paginate"])
+              try:
+                  comments = json.loads(raw_comments) if raw_comments else []
+              except json.JSONDecodeError:
+                  comments = []
+
+              for c in comments:
+                  user = c.get("user") or {}
+                  who = user.get("login", "")
                   if who.lower() == OURS or not who:
                       continue
-                  cid = c.get("id") or c.get("url", "")
+                  if user.get("type") == "Bot" or who.endswith("[bot]"):
+                      print(f"  skipping bot comment from {who}")
+                      continue
+                  cid = c.get("id") or c.get("html_url", "")
                   alerter.alert(
                       event_key("thread-comment", ref, cid),
                       f"\U0001F4AC {ref}: reply from {who}",
