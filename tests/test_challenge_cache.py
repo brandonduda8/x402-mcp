@@ -94,3 +94,61 @@ def test_the_live_tx_decision_builder_uses_the_cache(monkeypatch) -> None:
     monkeypatch.setattr(x402_services, "build_seller_requirements", boom)
     # price unchanged -> same fingerprint -> cache hit, never even calls build
     assert tx_decision.build_payment_required_header() == "GOOD-HDR"
+
+
+def test_a_description_change_busts_the_cache() -> None:
+    """The bug this helper exists for: rewriting a catalog description changed
+    the code, passed its tests, deployed, and never reached a buyer, because the
+    hand-written fingerprint covered only network|price|resource|discoverable.
+    The stale header survived in Redis across restarts — and a catalog indexes
+    a description ONCE, so the stale text would have been frozen in permanently.
+    """
+    from app import challenge_cache
+
+    common = dict(
+        network="eip155:8453",
+        price="$0.01",
+        resource="https://host/mn/property-check",
+        discoverable=True,
+    )
+    before = challenge_cache.fingerprint(**common, description="old text")
+    after = challenge_cache.fingerprint(**common, description="new text")
+    assert before != after
+
+
+def test_every_builder_input_is_covered_by_the_fingerprint() -> None:
+    """Not just the description — the discovery examples ride in the header too."""
+    from app import challenge_cache
+
+    base = dict(
+        network="eip155:8453",
+        price="$0.01",
+        resource="https://host/r",
+        discoverable=True,
+        description="d",
+        input_example={"address": "a"},
+        output_example={"licensed": True},
+    )
+    baseline = challenge_cache.fingerprint(**base)
+    for field, changed in (
+        ("network", "eip155:84532"),
+        ("price", "$0.02"),
+        ("resource", "https://host/other"),
+        ("discoverable", False),
+        ("description", "different"),
+        ("input_example", {"address": "b"}),
+        ("output_example", {"licensed": False}),
+    ):
+        assert challenge_cache.fingerprint(**{**base, field: changed}) != baseline, (
+            f"changing {field} did not bust the challenge cache"
+        )
+
+
+def test_the_same_inputs_are_stable_across_calls() -> None:
+    """A fingerprint that churned would rebuild against the flaky facilitator
+    on every request, which is the whole thing this cache prevents."""
+    from app import challenge_cache
+
+    args = dict(network="eip155:8453", price="$0.01", description="d",
+                input_example={"k": [1, 2]}, output_example={"z": None})
+    assert challenge_cache.fingerprint(**args) == challenge_cache.fingerprint(**args)

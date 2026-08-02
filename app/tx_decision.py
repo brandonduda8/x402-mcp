@@ -169,7 +169,15 @@ def build_payment_required_header() -> str:
 
     network = settings.x402_default_network
     price = settings.tx_decision_price
-    fp = f"{network}|{price}|{resource_url()}|disc={settings.bazaar_discoverable}"
+    fp = challenge_cache.fingerprint(
+        network=network,
+        price=price,
+        resource=resource_url(),
+        discoverable=settings.bazaar_discoverable,
+        description=RESOURCE_DESCRIPTION,
+        input_example=DISCOVERY_INPUT_EXAMPLE,
+        output_example=DISCOVERY_OUTPUT_EXAMPLE,
+    )
 
     def _build() -> str:
         return build_seller_requirements(

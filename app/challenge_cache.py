@@ -19,11 +19,34 @@ no sale. The fingerprint busts the cache when the inputs actually change.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from typing import Any, Callable
 
 log = logging.getLogger("x402")
+
+
+def fingerprint(**parts: Any) -> str:
+    """Hash EVERYTHING that goes into the header, not just the priced parts.
+
+    The first fingerprints were hand-written as
+    `f"{network}|{price}|{resource_url}|disc={discoverable}"`, which silently
+    excluded the description and the discovery input/output examples — all of
+    which are baked into the cached header and persisted to Redis. Rewriting a
+    catalog description therefore changed the code, passed its tests, deployed
+    cleanly, and never reached a single buyer: the box kept serving the old
+    cached challenge across restarts, with no way to tell from the outside.
+
+    That is worse than a stale price. A catalog indexes the description ONCE,
+    at the settle that first catalogs the resource, so a cached-stale
+    description gets frozen into the catalog permanently.
+
+    Pass every builder input here and the cache busts whenever any of them
+    changes.
+    """
+    blob = json.dumps(parts, sort_keys=True, default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
 # name -> {"fp": <inputs fingerprint>, "header": <base64 challenge>}
 _mem: dict[str, dict[str, str]] = {}
