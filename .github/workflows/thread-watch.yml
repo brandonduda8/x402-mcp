@@ -39,7 +39,7 @@ jobs:
       # to a direct email (see ClawRouter outreach email reply watch routine).
       # gold-402#58 removed 2026-08-02: resolved — the entry was applied to
       # main and the thread closed, so there is nothing left to watch.
-      THREADS: 'BankrBot/skills:pr:588'
+      THREADS: 'BankrBot/skills:pr:588 Merit-Systems/agentcash-skills:pr:27'
       # Our own GitHub login — comments BY us are not events to alert on.
       OUR_LOGIN: kwizzlesurp10-ctrl
     steps:
