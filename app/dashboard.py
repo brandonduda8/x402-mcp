@@ -100,7 +100,7 @@ h2 .count{color:var(--faint);letter-spacing:0;font-weight:400}
   padding:1px 8px;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
 .tier-badge.pro{border-color:var(--green);color:var(--green)}
 .agent-row{display:flex;gap:8px;margin-bottom:6px}
-.agent-row input{flex:1;background:var(--ink);border:1px solid var(--line);
+.agent-row input,.agent-row select{flex:1;background:var(--ink);border:1px solid var(--line);
   padding:6px 10px;color:var(--text);min-width:0}
 .agent-row input::placeholder{color:var(--faint)}
 .agent-row button{background:var(--amber);border:none;color:var(--ink);
@@ -180,6 +180,10 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
       <input id="agent-input" placeholder="agent id" value="dashboard-agent" spellcheck="false" aria-label="Agent ID">
       <button id="agent-go" type="button">Query</button>
     </div>
+    <div class="agent-row">
+      <select id="agent-select" aria-label="Registered agent"><option value="">— pick a registered agent —</option></select>
+    </div>
+    <p class="hint" id="q-registered">Loading registered agents…</p>
     <dl class="kv">
       <dt>agent</dt><dd id="q-agent">—</dd>
       <dt>tier</dt><dd><span id="q-tier" class="tier-badge">—</span></dd>
@@ -397,6 +401,33 @@ async function pollQuota(){
   }catch(e){ tape("err", e.message); }
 }
 
+/* ---- registered agents: proves the tier system is live even while every
+   agent sits at 0 calls (quota lookups never consume a call, so nothing
+   here moves on its own — this just shows real ids exist to query). */
+async function loadRegisteredAgents(){
+  try{
+    const {agents} = await getJSON("/stats");
+    const active = agents.filter(a => a.calls_this_month > 0).length;
+    $("q-registered").textContent = active > 0
+      ? `${agents.length} registered agents · ${active} with calls this month`
+      : `${agents.length} registered agents · all free tier · 0 calls so far (tier system is live, just not yet consumed)`;
+    const sel = $("agent-select");
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— pick a registered agent —</option>';
+    agents.forEach(a => {
+      const opt = document.createElement("option");
+      opt.value = a.agent_id;
+      opt.textContent = `${a.agent_id}  (${a.tier}, ${a.calls_this_month} calls)`;
+      sel.appendChild(opt);
+    });
+    sel.value = current;
+    tape("ok", `stats poll — ${agents.length} registered agents`);
+  }catch(e){
+    $("q-registered").textContent = "Could not load registered agents.";
+    tape("err", e.message);
+  }
+}
+
 /* ---- storefront: what is listed, and what has actually been paid ----
    Polled far slower than health/quota on purpose. These three endpoints read
    the ledgers and registry, which are Redis-backed in production on a plan
@@ -555,6 +586,11 @@ function tick(){
 
 $("agent-go").addEventListener("click", pollQuota);
 $("agent-input").addEventListener("keydown", (e) => { if (e.key === "Enter") pollQuota(); });
+$("agent-select").addEventListener("change", (e) => {
+  if (!e.target.value) return;
+  $("agent-input").value = e.target.value;
+  pollQuota();
+});
 document.addEventListener("keydown", (e) => {
   if (e.key === "/" && document.activeElement !== $("agent-input")){
     e.preventDefault();
@@ -564,12 +600,13 @@ document.addEventListener("keydown", (e) => {
 });
 
 tick(); setInterval(tick, 1000);
-(async () => { await loadManifest(); loadUpgrade(); pollHealth(); pollQuota(); pollStore(); loadDistribution(); })();
+(async () => { await loadManifest(); loadUpgrade(); pollHealth(); pollQuota(); pollStore(); loadDistribution(); loadRegisteredAgents(); })();
 setInterval(pollHealth, 5000);
 setInterval(pollQuota, 5000);
 setInterval(pollStore, 30000);
 setInterval(loadDistribution, 60000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollStore(); loadDistribution(); } });
+setInterval(loadRegisteredAgents, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollStore(); loadDistribution(); loadRegisteredAgents(); } });
 </script>
 </body>
 </html>

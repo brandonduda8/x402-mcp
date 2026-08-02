@@ -44,6 +44,15 @@ def test_dashboard_endpoints_it_polls_are_live() -> None:
     assert client.get("/ledger/revenue").status_code == 200
 
 
+def test_registered_agents_panel_is_rendered() -> None:
+    """The quota panel's agent picker needs its ids and the /stats poller."""
+    html = client.get("/dashboard").text
+    assert 'id="agent-select"' in html
+    assert 'id="q-registered"' in html
+    assert "loadRegisteredAgents" in html
+    assert "/stats" in html
+
+
 def test_storefront_panel_is_rendered() -> None:
     """The commerce panel needs the element ids its poller writes into."""
     html = client.get("/dashboard").text
