@@ -1,0 +1,213 @@
+"""The public OpenAPI document — the one discovery crawlers actually read.
+
+x402scan (and the `@agentcash/discovery` auditor it ships) resolves a seller in
+strict precedence: `/openapi.json` FIRST, `/.well-known/x402` only as a
+fallback. FastAPI generates that document for free, which is exactly the
+problem — run their auditor against the untouched spec and you get:
+
+    Source: openapi   Routes: 33
+    [info] L2_NO_PAID_ROUTES - No endpoints are marked as paid or apiKey+paid.
+
+So the storefront advertised itself to the largest x402 explorer as a free API
+with nothing to sell, and the hand-built `/.well-known/x402` never got read at
+all. It also published 33 routes, including `/wallet`, `/ledger/{name}`,
+`/security`, `/swarm/run`, `/stripe/webhook` and `/probe` — an operator surface
+that has no business in a public discovery document.
+
+This module rewrites the generated schema into the document a buyer needs:
+
+- paid operations carry `x-payment-info` (price + protocol) and a documented
+  402 response, priced from `agent_surface.paid_resources()` so the spec cannot
+  drift from `/llms.txt` and `/.well-known/x402`;
+- everything that is not a product or a machine-readable doc is dropped, by
+  ALLOWLIST — a new internal route is invisible by default, which is the safe
+  direction for this to fail;
+- surviving free routes declare `security: []`, the explicit "public on
+  purpose" marker their auditor asks for, so silence is never read as an
+  oversight;
+- `info.x-guidance` gives an agent the payment flow in one paragraph.
+
+Deliberately NOT cached: the same reason `agent_surface` builds its documents
+from live config rather than a checked-in file. A spec regenerated per request
+cannot drift from the prices actually being charged.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from app import agent_surface
+from app.config import settings
+
+# Machine-readable docs and the free preview: public on purpose, and useful to
+# an agent deciding whether to pay. Everything not listed here and not a paid
+# product is dropped from the public document.
+PUBLIC_FREE_PATHS: tuple[str, ...] = (
+    "/health",
+    "/llms.txt",
+    "/.well-known/x402",
+    "/.well-known/mcp",
+    "/pulse",
+)
+
+# What a crawler must never learn from us. Not used for filtering (the
+# allowlist already excludes them) — this is the list the guard test asserts
+# stayed out, so a future refactor of the allowlist cannot quietly re-expose
+# the operator surface.
+OPERATOR_PATHS: tuple[str, ...] = (
+    "/wallet",
+    "/ledger/{name}",
+    "/security",
+    "/swarm/run",
+    "/swarm/runs",
+    "/swarm/revenue",
+    "/swarm/assessment",
+    "/pulse/publish",
+    "/probe",
+    "/seller/requirements",
+    "/stripe/checkout",
+    "/stripe/webhook",
+    "/os",
+    "/os/history",
+    "/doctor",
+    "/demand",
+    "/events",
+    "/stats",
+    "/dashboard",
+    "/quota/{agent_id}",
+)
+
+GUIDANCE = """\
+Pay-per-call HTTP APIs over x402: USDC on Base, no API key, no signup, no \
+prior relationship with the seller.
+
+## Paying
+A 402 response IS the price quote. Read the PAYMENT-REQUIRED header, sign an \
+EIP-3009 USDC transfer authorization for the quoted atomic amount, and retry \
+with PAYMENT-SIGNATURE. Settlement is gasless for the buyer — you need USDC on \
+Base, not ETH. Content is served only after settlement succeeds.
+
+## Before you integrate
+Full failure modes, staleness guarantees and per-endpoint parameters are at \
+/llms.txt. Prices in this document are authoritative for the running \
+deployment; the live 402 challenge is authoritative over both.\
+"""
+
+
+def _price_amount(price: str | None) -> str | None:
+    """`"$0.01"` -> `"0.01"`. Free or unparseable prices return None.
+
+    x402scan wants a decimal USD string here, NOT the token atomic units used
+    in the runtime challenge — mixing those up is on their published list of
+    common registration failures.
+    """
+    if not price or price == "free":
+        return None
+    cleaned = price.strip().lstrip("$").strip()
+    try:
+        float(cleaned)
+    except ValueError:
+        return None
+    return cleaned
+
+
+def _path_of(url: str) -> str:
+    base = settings.public_base_url.rstrip("/")
+    return url[len(base):] if url.startswith(base) else url
+
+
+def paid_paths() -> dict[str, str]:
+    """Public paid HTTP path -> USD price string, from the one source of truth."""
+    paths: dict[str, str] = {}
+    for resource in agent_surface.paid_resources():
+        amount = _price_amount(resource.get("price"))
+        if amount:
+            paths[_path_of(resource["url"])] = amount
+
+    # The cataloged Pulse listing is a concrete product URL, not a template —
+    # a crawler cannot probe `/swarm/products/{product_id}/purchase`. Publish
+    # it only when a pinned id is configured, because that is exactly the
+    # condition under which the boot-time republish guarantees the URL exists;
+    # advertising it otherwise would earn a "expected 402, got 404".
+    if settings.pinned_pulse_product_id:
+        amount = _price_amount(settings.pulse_price)
+        if amount:
+            paths[f"/swarm/products/{settings.pinned_pulse_product_id}/purchase"] = amount
+    return paths
+
+
+def _payment_info(amount: str) -> dict[str, Any]:
+    return {
+        "protocols": [{"x402": {}}],
+        "price": {"mode": "fixed", "currency": "USD", "amount": amount},
+    }
+
+
+_PAYMENT_REQUIRED_RESPONSE = {
+    "description": "Payment required. The PAYMENT-REQUIRED header carries the "
+    "x402 challenge: sign it and retry with PAYMENT-SIGNATURE.",
+    "headers": {
+        "PAYMENT-REQUIRED": {
+            "description": "Base64 x402 challenge (accepts[], atomic amounts).",
+            "schema": {"type": "string"},
+        }
+    },
+}
+
+
+def tighten(schema: dict[str, Any]) -> dict[str, Any]:
+    """Turn FastAPI's generated schema into the public discovery document."""
+    priced = paid_paths()
+    kept: dict[str, Any] = {}
+
+    for path, operations in schema.get("paths", {}).items():
+        amount = priced.get(path)
+        if amount is None and path not in PUBLIC_FREE_PATHS:
+            continue
+
+        for method, operation in operations.items():
+            if not isinstance(operation, dict):
+                continue
+            if amount is None:
+                # Explicitly public, rather than merely undeclared.
+                operation["security"] = []
+            else:
+                operation["x-payment-info"] = _payment_info(amount)
+                operation.setdefault("responses", {})["402"] = dict(
+                    _PAYMENT_REQUIRED_RESPONSE
+                )
+        kept[path] = operations
+
+    # A concrete purchase URL the templated route cannot express. Re-point the
+    # template at the pinned product and drop the now-satisfied path param.
+    template = "/swarm/products/{product_id}/purchase"
+    for path, amount in priced.items():
+        if path in kept or not path.endswith("/purchase"):
+            continue
+        operations = schema.get("paths", {}).get(template)
+        if not operations:
+            continue
+        concrete: dict[str, Any] = {}
+        for method, operation in operations.items():
+            if method != "get" or not isinstance(operation, dict):
+                continue
+            resolved = dict(operation)
+            resolved["parameters"] = [
+                p for p in resolved.get("parameters", [])
+                if p.get("name") != "product_id"
+            ]
+            resolved["x-payment-info"] = _payment_info(amount)
+            resolved.setdefault("responses", {})["402"] = dict(
+                _PAYMENT_REQUIRED_RESPONSE
+            )
+            concrete[method] = resolved
+        if concrete:
+            kept[path] = concrete
+
+    schema["paths"] = kept
+    schema["info"]["x-guidance"] = GUIDANCE
+    schema["info"]["contact"] = {
+        "url": "https://github.com/kwizzlesurp10-ctrl/x402-mcp/issues"
+    }
+    schema["servers"] = [{"url": settings.public_base_url.rstrip("/")}]
+    return schema

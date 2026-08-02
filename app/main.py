@@ -13,11 +13,13 @@ import httpx
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import (
     HTMLResponse,
     JSONResponse,
     PlainTextResponse,
     RedirectResponse,
+    Response,
     StreamingResponse,
 )
 from pydantic import BaseModel, Field, HttpUrl
@@ -118,6 +120,30 @@ from app import x402_middleware_pilot  # noqa: E402
 x402_middleware_pilot.register(app)
 
 
+def _public_openapi() -> dict:
+    """Serve the discovery document, not FastAPI's inventory of every route.
+
+    `/openapi.json` is the FIRST thing x402scan reads about a seller, ahead of
+    /.well-known/x402 — see app/openapi_spec.py for what the untouched
+    generated version was telling them. Not cached (no `app.openapi_schema`
+    assignment): prices come from live config, and a cached spec can drift from
+    what is actually being charged.
+    """
+    from app import openapi_spec
+
+    return openapi_spec.tighten(
+        get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+        )
+    )
+
+
+app.openapi = _public_openapi  # type: ignore[method-assign]
+
+
 class SellerRequirementsRequest(BaseModel):
     network: str = "eip155:84532"
     pay_to: str | None = None
@@ -168,6 +194,28 @@ async def generic_handler(request: Request, exc: Exception) -> JSONResponse:
 @app.get("/", include_in_schema=False)
 async def root() -> RedirectResponse:
     return RedirectResponse(url="/dashboard", status_code=307)
+
+
+# Directories render a seller's favicon next to its listing — x402scan pulls
+# `<origin>/favicon` for every resource on its index page, and their discovery
+# auditor warns when there isn't one. Inline SVG so there is no binary asset to
+# ship, no extra request path, and nothing to go stale.
+_FAVICON = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+    '<rect width="64" height="64" rx="12" fill="#0b1020"/>'
+    '<text x="32" y="42" font-family="ui-monospace,monospace" font-size="26" '
+    'font-weight="700" fill="#4ade80" text-anchor="middle">402</text></svg>'
+)
+
+
+@app.get("/favicon.svg", include_in_schema=False)
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon() -> Response:
+    return Response(
+        content=_FAVICON,
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -592,12 +640,26 @@ async def stripe_webhook(
 
 
 @app.get("/mn/property-check")
-async def mn_property_check(request: Request, address: str) -> JSONResponse:
+async def mn_property_check(
+    request: Request,
+    address: str | None = Query(
+        default=None, description="Minneapolis street address, 1-120 chars"
+    ),
+) -> JSONResponse:
     """Paid x402 resource: Minneapolis rental compliance snapshot ($0.01 USDC).
 
     No PAYMENT-SIGNATURE header → 402 with PAYMENT-REQUIRED (x402 v2 wire).
     With payment → verify + settle via facilitator, then serve the report
     with the settlement receipt in PAYMENT-RESPONSE.
+
+    `address` is optional at the signature level and validated *after* the
+    unpaid branch on purpose: a discovery crawler probes with no parameters at
+    all, and FastAPI's own 422 would fire before this function ever ran. "402
+    expected, got 400/422 from request validation running before the payment
+    challenge" is on x402scan's published list of registration failures, and
+    this endpoint has never been indexed by any catalog. The charge order is
+    unchanged — validation still runs before verify+settle, so a paying caller
+    with a bad address is rejected without being charged.
     """
     from app import mn_compliance
 
@@ -606,11 +668,6 @@ async def mn_property_check(request: Request, address: str) -> JSONResponse:
         return JSONResponse(
             status_code=503,
             content={"error": "seller_not_configured", "detail": "X402_PAY_TO_ADDRESS unset"},
-        )
-    if not address.strip() or len(address) > 120:
-        return JSONResponse(
-            status_code=422,
-            content={"error": "invalid_address", "detail": "address must be 1-120 chars"},
         )
 
     try:
@@ -639,6 +696,13 @@ async def mn_property_check(request: Request, address: str) -> JSONResponse:
                 "how_to_pay": "Retry with PAYMENT-SIGNATURE header (x402 v2); "
                 "requirements are in the PAYMENT-REQUIRED response header.",
             },
+        )
+
+    # Paid caller: validate before spending their money, never after.
+    if address is None or not address.strip() or len(address) > 120:
+        return JSONResponse(
+            status_code=422,
+            content={"error": "invalid_address", "detail": "address must be 1-120 chars"},
         )
 
     result = await mn_compliance.verify_and_settle(signature, payment_required)

@@ -27,10 +27,42 @@ def test_seller_unconfigured_returns_503(monkeypatch: pytest.MonkeyPatch) -> Non
     assert response.json()["error"] == "seller_not_configured"
 
 
-def test_blank_address_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_unpaid_request_gets_the_challenge_before_any_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deliberate contract change (2026-08-02): unpaid always means 402.
+
+    A missing or blank `address` used to return 422 to an unpaid caller — and
+    since a discovery crawler probes with no parameters at all, that is what
+    x402scan and CDP saw every time they looked at this endpoint. Neither ever
+    indexed it. Validation now happens on the paid path only.
+    """
     monkeypatch.setattr(settings, "x402_pay_to_address", TEST_PAY_TO)
-    response = client.get("/mn/property-check", params={"address": "   "})
+
+    for params in ({"address": "   "}, {}):
+        response = client.get("/mn/property-check", params=params)
+        assert response.status_code == 402, params
+        assert "PAYMENT-REQUIRED" in response.headers
+
+
+def test_a_paid_request_with_a_blank_address_is_rejected_before_it_is_charged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Validate-then-charge is the property that survived the reorder."""
+    monkeypatch.setattr(settings, "x402_pay_to_address", TEST_PAY_TO)
+
+    async def must_not_settle(signature: str, payment_required: str) -> dict:
+        raise AssertionError("settlement attempted for an invalid address")
+
+    monkeypatch.setattr(mn_compliance, "verify_and_settle", must_not_settle)
+
+    response = client.get(
+        "/mn/property-check",
+        params={"address": "   "},
+        headers={"PAYMENT-SIGNATURE": "sig-abc"},
+    )
     assert response.status_code == 422
+    assert response.json()["error"] == "invalid_address"
 
 
 def test_unpaid_request_returns_402_with_valid_x402_header(

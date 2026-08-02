@@ -77,8 +77,18 @@ def paid_resources() -> list[dict[str, Any]]:
 
 
 def well_known_x402() -> dict[str, Any]:
-    """Machine manifest of the paid surface. Shape is ours; content is config."""
+    """Machine manifest of the paid surface, content from live config.
+
+    `version` + `resources` as bare URL strings is x402scan's published
+    fan-out schema, and this document was serving neither: `x402_version`
+    under a different key, and `resources` as an array of objects their
+    parser cannot read. The richer per-resource detail we already had moves
+    to `resource_details` rather than being dropped — a compat document that
+    parses is worth more than a bespoke one that doesn't, and `/openapi.json`
+    (which crawlers read first) carries the same prices either way.
+    """
     return {
+        "version": 1,
         "x402_version": 2,
         "service": "x402-micropayments-mcp",
         "base_url": _base(),
@@ -86,7 +96,8 @@ def well_known_x402() -> dict[str, Any]:
         "payment_header": "PAYMENT-SIGNATURE",
         "challenge_header": "PAYMENT-REQUIRED",
         "receipt_header": "PAYMENT-RESPONSE",
-        "resources": paid_resources(),
+        "resources": [r["url"] for r in paid_resources() if r["price"] != "free"],
+        "resource_details": paid_resources(),
         "mcp": {
             "manifest": f"{_base()}/.well-known/mcp",
             "streamable_http": f"{_base()}/mcp/mcp",
