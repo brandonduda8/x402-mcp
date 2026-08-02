@@ -136,6 +136,59 @@ def paid_paths() -> dict[str, str]:
     return paths
 
 
+def _schema_from_example(value: Any) -> dict[str, Any]:
+    """Infer a JSON Schema from a response example.
+
+    Derived rather than hand-written so the OpenAPI response schema and the
+    Bazaar extension's output schema come from ONE example per product and
+    cannot drift — the same reason every other document here is generated.
+    """
+    if isinstance(value, bool):
+        return {"type": "boolean"}
+    if isinstance(value, int):
+        return {"type": "integer"}
+    if isinstance(value, float):
+        return {"type": "number"}
+    if isinstance(value, str):
+        return {"type": "string"}
+    if value is None:
+        # A null in the example means "sometimes absent", not "always null".
+        return {}
+    if isinstance(value, list):
+        items = _schema_from_example(value[0]) if value else {}
+        return {"type": "array", "items": items}
+    if isinstance(value, dict):
+        return {
+            "type": "object",
+            "properties": {k: _schema_from_example(v) for k, v in value.items()},
+        }
+    return {}
+
+
+def output_examples() -> dict[str, dict[str, Any]]:
+    """Public path -> a real 200 body, from each product's own discovery example.
+
+    Imported lazily: these modules pull in the RPC and compliance stacks, and
+    the spec is built per request.
+    """
+    from app import finality_check, mn_compliance, tx_decision
+
+    examples: dict[str, dict[str, Any]] = {
+        "/base/tx-decision": tx_decision.DISCOVERY_OUTPUT_EXAMPLE,
+        "/base/finality-check": finality_check.DISCOVERY_OUTPUT_EXAMPLE,
+        "/mn/property-check": mn_compliance.DISCOVERY_OUTPUT_EXAMPLE,
+    }
+    if settings.pinned_pulse_product_id:
+        pid = settings.pinned_pulse_product_id
+        examples[f"/swarm/products/{pid}/purchase"] = {
+            "product_id": pid,
+            "topic": "Base Network Pulse @ block 49428640",
+            "report": "Base mainnet: base fee 0.005 gwei, congestion low ...",
+            "payment_settled": True,
+        }
+    return examples
+
+
 def _payment_info(amount: str) -> dict[str, Any]:
     return {
         "protocols": [{"x402": {}}],
@@ -170,18 +223,43 @@ _PAYMENT_REQUIRED_RESPONSE = {
 }
 
 
-def _declare_paid(operation: dict[str, Any], amount: str) -> None:
-    """Mark one operation payable, and callable, in place."""
+def _declare_paid(
+    operation: dict[str, Any], amount: str, output_example: dict[str, Any] | None = None
+) -> None:
+    """Mark one operation payable, callable, and describable, in place."""
     operation["x-payment-info"] = _payment_info(amount)
-    operation.setdefault("responses", {})["402"] = dict(_PAYMENT_REQUIRED_RESPONSE)
+    responses = operation.setdefault("responses", {})
+    responses["402"] = dict(_PAYMENT_REQUIRED_RESPONSE)
+
     parameters = operation.setdefault("parameters", [])
     if not any(p.get("name") == "PAYMENT-SIGNATURE" for p in parameters):
         parameters.append(dict(_PAYMENT_SIGNATURE_PARAM))
+
+    # The handlers return bare JSONResponse, so FastAPI generates a 200 with an
+    # empty schema — `agentcash check` reports `"outputSchema": {}` and the
+    # operation earns SCHEMA_OUTPUT_MISSING. An agent deciding whether to spend
+    # $0.01 cannot see what it gets back, which is the whole question.
+    if not output_example:
+        return
+    ok = responses.setdefault("200", {"description": "Successful response"})
+    schema = ((ok.get("content") or {}).get("application/json") or {}).get("schema") or {}
+    # FastAPI emits `{"type": "object", "additionalProperties": true}` for a
+    # handler with no response_model — truthy, and describes nothing. Only a
+    # schema that names fields counts as already-documented.
+    if schema.get("properties") or schema.get("$ref") or schema.get("items"):
+        return
+    ok["content"] = {
+        "application/json": {
+            "schema": _schema_from_example(output_example),
+            "example": output_example,
+        }
+    }
 
 
 def tighten(schema: dict[str, Any]) -> dict[str, Any]:
     """Turn FastAPI's generated schema into the public discovery document."""
     priced = paid_paths()
+    examples = output_examples()
     kept: dict[str, Any] = {}
 
     for path, operations in schema.get("paths", {}).items():
@@ -196,7 +274,7 @@ def tighten(schema: dict[str, Any]) -> dict[str, Any]:
                 # Explicitly public, rather than merely undeclared.
                 operation["security"] = []
             else:
-                _declare_paid(operation, amount)
+                _declare_paid(operation, amount, examples.get(path))
         kept[path] = operations
 
     # A concrete purchase URL the templated route cannot express. Re-point the
@@ -217,7 +295,7 @@ def tighten(schema: dict[str, Any]) -> dict[str, Any]:
                 p for p in resolved.get("parameters", [])
                 if p.get("name") != "product_id"
             ]
-            _declare_paid(resolved, amount)
+            _declare_paid(resolved, amount, examples.get(path))
             concrete[method] = resolved
         if concrete:
             kept[path] = concrete

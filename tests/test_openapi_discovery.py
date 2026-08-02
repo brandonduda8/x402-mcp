@@ -47,6 +47,74 @@ def test_every_paid_endpoint_declares_an_input_an_agent_can_construct(spec: dict
         assert "PAYMENT-SIGNATURE" in names, f"{path} does not document how to pay"
 
 
+def test_every_paid_endpoint_says_what_you_get_for_your_money(spec: dict) -> None:
+    """`agentcash check` reported `"outputSchema": {}` on three paid routes.
+
+    The handlers return bare JSONResponse, so FastAPI emits a 200 whose schema
+    is `{"type": "object", "additionalProperties": true}` — truthy, and
+    describing nothing. An agent deciding whether to spend $0.01 could not see
+    what it gets back, which is the whole question. Note this is a *different*
+    field from the Bazaar extension's output schema in the runtime 402, which
+    was always populated — checking that one is what hid this for a day.
+    """
+    for path in openapi_spec.paid_paths():
+        content = (
+            (spec["paths"][path]["get"]["responses"]["200"].get("content") or {})
+            .get("application/json")
+        ) or {}
+        properties = (content.get("schema") or {}).get("properties") or {}
+        assert properties, f"{path} does not describe its response body"
+        assert content.get("example"), f"{path} has no worked response example"
+
+
+def test_response_schemas_come_from_the_products_own_examples(spec: dict) -> None:
+    """One example per product feeds both the OpenAPI schema and the Bazaar
+    extension, so the two documents cannot describe different responses."""
+    from app import tx_decision
+
+    example = spec["paths"]["/base/tx-decision"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["example"]
+    assert example == tx_decision.DISCOVERY_OUTPUT_EXAMPLE
+
+
+def test_a_handler_that_documents_itself_is_left_alone() -> None:
+    """Don't clobber a real response_model with an inferred schema."""
+    real = {"type": "object", "properties": {"kept": {"type": "string"}}}
+    operation = {
+        "responses": {"200": {"content": {"application/json": {"schema": real}}}}
+    }
+    openapi_spec._declare_paid(operation, "0.01", {"inferred": 1})
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == real
+
+
+@pytest.mark.parametrize(
+    ("example", "expected"),
+    [
+        ({"a": "s"}, {"type": "object", "properties": {"a": {"type": "string"}}}),
+        ({"n": 1}, {"type": "object", "properties": {"n": {"type": "integer"}}}),
+        ({"f": 1.5}, {"type": "object", "properties": {"f": {"type": "number"}}}),
+        ({"b": True}, {"type": "object", "properties": {"b": {"type": "boolean"}}}),
+        ({"z": None}, {"type": "object", "properties": {"z": {}}}),
+        (
+            {"l": [{"k": "v"}]},
+            {
+                "type": "object",
+                "properties": {
+                    "l": {
+                        "type": "array",
+                        "items": {"type": "object", "properties": {"k": {"type": "string"}}},
+                    }
+                },
+            },
+        ),
+    ],
+)
+def test_schema_inference(example: dict, expected: dict) -> None:
+    # bool before int: True is an int in Python, and "boolean" is the honest type.
+    assert openapi_spec._schema_from_example(example) == expected
+
+
 def test_prices_are_decimal_usd_not_atomic_units(spec: dict) -> None:
     """Atomic units where dollars belong is on x402scan's published list of
     common registration failures ($0.01 is "0.01" here, "10000" on the wire)."""
