@@ -35,11 +35,16 @@ jobs:
       OUR_WALLETS: '0x67ffc9b439ae24b0f7c7ca837c4adfafa06f9d38'
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
+      PYTHONPATH: scripts
     steps:
+      - uses: actions/checkout@v4
+
       - name: Scan Base for stranger payments and alert
         run: |
           python3 - <<'PY'
-          import json, os, subprocess, urllib.request
+          import json, os, urllib.request
+
+          from alerts import Alerter, event_key
 
           RPC = os.environ["RPC"]
           USDC = os.environ["USDC"]
@@ -59,8 +64,8 @@ jobs:
 
           latest = int(rpc("eth_blockNumber", []), 16)
           # ~2s blocks; cron every 30 min. Scan the last ~2 hours (3600 blocks)
-          # every run so a delayed/skipped run cannot miss a sale. Dedup by
-          # issue title keeps the overlap harmless.
+          # every run so a delayed/skipped run cannot miss a sale. The event key
+          # in the alert title keeps the overlap harmless.
           start = latest - 3600
           topic_to = "0x" + "0" * 24 + PAY_TO[2:]
           logs = rpc("eth_getLogs", [{
@@ -78,20 +83,12 @@ jobs:
 
           print(f"scanned {latest-start} blocks; {len(logs)} payments in, {len(strangers)} from strangers")
 
-          def issue_exists(tx):
-              out = subprocess.run(
-                  ["gh", "issue", "list", "--repo", REPO, "--state", "all",
-                   "--search", tx, "--json", "number", "--limit", "1"],
-                  capture_output=True, text=True,
-              )
-              return bool(json.loads(out.stdout or "[]"))
+          alerter = Alerter(REPO, "sale")
 
           for frm, amt, tx, blk in strangers:
-              if issue_exists(tx):
-                  print(f"  already alerted: {tx}")
-                  continue
-              title = f"\U0001F4B0 External sale: ${amt:.4f} USDC from {frm[:10]}…"
-              body = (
+              alerter.alert(
+                  event_key("sale", tx),
+                  f"\U0001F4B0 External sale: ${amt:.4f} USDC from {frm[:10]}…",
                   f"A wallet that is not ours paid the storefront.\n\n"
                   f"- **Amount:** ${amt:.6f} USDC\n"
                   f"- **From:** `{frm}`\n"
@@ -100,12 +97,8 @@ jobs:
                   f"- **Block:** {blk}\n\n"
                   f"This is a real external purchase — the first-ever was 0xadacdfdd on "
                   f"2026-07-22 (old $0.25 Pulse). Cross-check /ledger/revenue and /demand "
-                  f"to see which product and client class. Close this issue once acknowledged."
+                  f"to see which product and client class. Close this issue once acknowledged.",
               )
-              subprocess.run(
-                  ["gh", "issue", "create", "--repo", REPO,
-                   "--title", title, "--body", body, "--label", "sale"],
-                  check=False,
-              )
-              print(f"  ALERTED: {tx}")
+
+          print(alerter.summary())
           PY

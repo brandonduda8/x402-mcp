@@ -1,14 +1,21 @@
 name: thread watch
 
-# Watches the outreach threads on OTHER repos — the BankrBot skill PR and the
-# ClawRouter service issue — and opens a local issue the moment either gets a
-# new comment, a state change, or (for the PR) a review. A maintainer reply is
-# the thing that converts to a real agent buyer, and a lagged response on our
-# side is what loses it. This makes the reply reach you off-box, machine closed.
+# Watches the outreach threads on OTHER repos — currently the BankrBot skill PR
+# — and opens a local issue the moment one gets a new comment, a state change,
+# or a review. A maintainer reply is the thing that converts to a real agent
+# buyer, and a lagged response on our side is what loses it. This makes the
+# reply reach you off-box, machine closed.
 #
-# State lives in the alert issues themselves: each new event opens exactly one
-# local issue whose title carries the event fingerprint, and we skip anything
-# already alerted. No committed state file, no external store.
+# State lives in the alert issues themselves: each event opens exactly one
+# local issue whose title carries the event key, and scripts/alerts.py skips
+# anything already alerted. No committed state file, no external store.
+#
+# 2026-08-02: this workflow spent four days opening the same two alerts every
+# 30 minutes (432 issues) because the fingerprint it searched for was never
+# written into the issue it created, and every alert `@`-mentioned the
+# maintainer whose thread it was watching. Dedup, mention-escaping and a
+# per-run cap all now live in scripts/alerts.py, under test — do not hand-roll
+# them here again.
 
 on:
   schedule:
@@ -26,20 +33,28 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       SELF_REPO: ${{ github.repository }}
+      PYTHONPATH: scripts
       # Threads to watch: "owner/repo:kind:number". kind is pr or issue.
       # ClawRouter#216 removed 2026-07-25: we closed it ourselves after pivoting
       # to a direct email (see ClawRouter outreach email reply watch routine).
-      THREADS: 'BankrBot/skills:pr:588 Haustorium12/gold-402:pr:58'
+      # gold-402#58 removed 2026-08-02: resolved — the entry was applied to
+      # main and the thread closed, so there is nothing left to watch.
+      THREADS: 'BankrBot/skills:pr:588'
       # Our own GitHub login — comments BY us are not events to alert on.
       OUR_LOGIN: kwizzlesurp10-ctrl
     steps:
+      - uses: actions/checkout@v4
+
       - name: Poll outreach threads and alert on maintainer activity
         run: |
           python3 - <<'PY'
           import json, os, subprocess
 
+          from alerts import Alerter, event_key
+
           SELF = os.environ["SELF_REPO"]
           OURS = os.environ["OUR_LOGIN"].lower()
+          alerter = Alerter(SELF, "outreach")
 
           def gh(args):
               r = subprocess.run(["gh", *args], capture_output=True, text=True)
@@ -47,22 +62,6 @@ jobs:
                   print(f"  gh {' '.join(args)} -> {r.stderr.strip()[:160]}")
                   return None
               return r.stdout
-
-          def already_alerted(fingerprint):
-              out = gh(["issue", "list", "--repo", SELF, "--state", "all",
-                        "--search", fingerprint, "--json", "number", "--limit", "1"])
-              try:
-                  return bool(json.loads(out or "[]"))
-              except Exception:
-                  return False  # never suppress a real alert on a parse hiccup
-
-          def alert(fingerprint, title, body):
-              if already_alerted(fingerprint):
-                  print(f"  already alerted: {fingerprint}")
-                  return
-              gh(["issue", "create", "--repo", SELF, "--title", title,
-                  "--body", body, "--label", "outreach"])
-              print(f"  ALERTED: {fingerprint}")
 
           for spec in os.environ["THREADS"].split():
               repo, kind, number = spec.split(":")
@@ -83,16 +82,15 @@ jobs:
 
               # 1) New comments from anyone who is not us.
               for c in d.get("comments", []):
-                  who = (c.get("author") or {}).get("login", "").lower()
-                  if who == OURS or not who:
+                  who = (c.get("author") or {}).get("login", "")
+                  if who.lower() == OURS or not who:
                       continue
                   cid = c.get("id") or c.get("url", "")
-                  fp = f"thread-evt {ref} comment {cid}"
-                  alert(
-                      fp,
-                      f"\U0001F4AC {ref}: reply from @{who}",
+                  alerter.alert(
+                      event_key("thread-comment", ref, cid),
+                      f"\U0001F4AC {ref}: reply from {who}",
                       f"A maintainer commented on your outreach thread.\n\n"
-                      f"- **Thread:** {url}\n- **By:** @{who}\n\n"
+                      f"- **Thread:** {url}\n- **By:** {who}\n\n"
                       f"> {(c.get('body') or '')[:500]}\n\n"
                       f"Respond promptly — a lagged reply is what loses the integration. "
                       f"Close this once handled.",
@@ -100,32 +98,33 @@ jobs:
 
               # 2) PR review decisions (approve / changes requested).
               for rv in d.get("reviews", []):
-                  who = (rv.get("author") or {}).get("login", "").lower()
+                  who = (rv.get("author") or {}).get("login", "")
                   st = rv.get("state", "")
-                  if who == OURS or st in ("", "COMMENTED", "PENDING"):
+                  if who.lower() == OURS or st in ("", "COMMENTED", "PENDING"):
                       continue
-                  fp = f"thread-evt {ref} review {rv.get('id','')}"
-                  alert(
-                      fp,
-                      f"\U0001F4DD {ref}: review {st} by @{who}",
-                      f"- **Thread:** {url}\n- **Review:** {st} by @{who}\n\n"
+                  alerter.alert(
+                      event_key("thread-review", ref, rv.get("id", "")),
+                      f"\U0001F4DD {ref}: review {st} by {who}",
+                      f"- **Thread:** {url}\n- **Review:** {st} by {who}\n\n"
                       f"> {(rv.get('body') or '')[:500]}\n\nClose this once handled.",
                   )
 
               # 3) Terminal state: merged / closed.
               state = d.get("state", "")
               if state in ("MERGED", "CLOSED"):
-                  fp = f"thread-evt {ref} state {state}"
                   good = state == "MERGED"
                   emoji = "\U0001F389" if good else "\U0001F6D1"
-                  alert(
-                      fp,
+                  alerter.alert(
+                      event_key("thread-state", ref, state),
                       f"{emoji} {ref}: {state}",
                       f"- **Thread:** {url}\n- **Now:** {state}\n\n"
                       + ("Merged — the integration is live. Watch /demand qualified_views "
                          "for that endpoint and the sale-watch for the first external payer."
                          if good else
-                         "Closed without merge. Read the thread for why; the reason is "
-                         "market signal worth keeping."),
+                         "Closed. Read the thread before assuming it was a rejection — a "
+                         "maintainer who applies your change by hand also closes rather "
+                         "than merges. Either way the reason is market signal worth keeping."),
                   )
+
+          print(alerter.summary())
           PY

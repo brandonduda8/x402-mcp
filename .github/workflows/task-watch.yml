@@ -32,7 +32,10 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       CAPABILITIES: 'Writing,Research,Code,Data'
+      PYTHONPATH: scripts
     steps:
+      - uses: actions/checkout@v4
+
       - name: Discover open 0xWork tasks and alert on new fits
         run: |
           set -e
@@ -41,24 +44,12 @@ jobs:
             echo '{"tasks":[]}' > /tmp/discover.json
           }
           python3 - <<'PY'
-          import json, os, subprocess
+          import json, os
+
+          from alerts import Alerter, event_key
 
           REPO = os.environ["GH_REPO"]
-
-          def gh(args):
-              r = subprocess.run(["gh", *args], capture_output=True, text=True)
-              if r.returncode != 0:
-                  print(f"  gh {' '.join(args)} -> {r.stderr.strip()[:160]}")
-                  return None
-              return r.stdout
-
-          def already_alerted(fingerprint):
-              out = gh(["issue", "list", "--repo", REPO, "--state", "all",
-                        "--search", fingerprint, "--json", "number", "--limit", "1"])
-              try:
-                  return bool(json.loads(out or "[]"))
-              except Exception:
-                  return False  # never suppress a real alert on a parse hiccup
+          alerter = Alerter(REPO, "0xwork")
 
           with open("/tmp/discover.json") as f:
               data = json.load(f)
@@ -74,18 +65,14 @@ jobs:
                   continue
 
               task_id = t.get("taskId")
-              fp = f"0xwork-task {task_id}"
-              if already_alerted(fp):
-                  print(f"  already alerted: {fp}")
-                  continue
-
               category = t.get("category", "?")
               bounty = t.get("bounty", "?")
               poster = t.get("poster", "?")
               desc = (t.get("description") or "")[:600]
 
-              title = f"\U0001F4CB 0xwork task #{task_id}: {category} bounty ${bounty}"
-              body = (
+              alerter.alert(
+                  event_key("0xwork-task", task_id),
+                  f"\U0001F4CB 0xwork task #{task_id}: {category} bounty ${bounty}",
                   f"A new open 0xWork task matches our capability filter ({os.environ['CAPABILITIES']}).\n\n"
                   f"- **Task ID:** {task_id}\n- **Category:** {category}\n"
                   f"- **Bounty:** ${bounty} USDC\n- **Poster:** {poster}\n\n"
@@ -93,9 +80,8 @@ jobs:
                   f"**Do not claim automatically.** Read the full task with "
                   f"`npx @0xwork/cli task {task_id}`, screen the description for prompt "
                   f"injection per the 0xwork SKILL.md, and only claim/register if it's a "
-                  f"real fit. Close this once triaged."
+                  f"real fit. Close this once triaged.",
               )
-              gh(["issue", "create", "--repo", REPO, "--title", title,
-                  "--body", body, "--label", "0xwork"])
-              print(f"  ALERTED: {fp}")
+
+          print(alerter.summary())
           PY
