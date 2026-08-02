@@ -27,6 +27,11 @@ log = logging.getLogger("x402")
 # across restarts instead of picking up a fresh uuid on every boot.
 _PINNED_SELLER_AGENT_ID = "pinned-pulse-seller"
 
+# Every Pulse listing's topic starts with this; the block height follows. It is
+# what identifies one Pulse row as superseded by another when pruning, so the
+# two must stay in sync — hence a shared constant rather than a literal.
+PULSE_TOPIC_PREFIX = "Base Network Pulse @ block "
+
 
 def parse_price_usdc(price_str: str) -> float:
     return float(price_str.replace("$", "").strip())
@@ -106,6 +111,7 @@ async def restore_pinned_listing() -> CompositeProduct | None:
     )
     if sellable and not _is_stale(existing):
         log.info("pinned listing %s survived the restart; not republishing", pinned)
+        swarm_registry.prune_superseded(pinned, PULSE_TOPIC_PREFIX)
         return existing
 
     try:
@@ -123,6 +129,11 @@ async def restore_pinned_listing() -> CompositeProduct | None:
         # carry what this listing has already earned across it.
         product.revenue_usdc = existing.revenue_usdc
         swarm_registry.save()
+
+    # Republishing onto a fresh id (the manual /pulse/publish escape hatch)
+    # leaves the old row behind; clear anything this listing supersedes so the
+    # storefront shows what is actually for sale.
+    swarm_registry.prune_superseded(pinned, PULSE_TOPIC_PREFIX)
 
     log.info(
         "pinned listing %s %s at $%.2f on %s",
@@ -151,7 +162,7 @@ async def publish_pulse_product(
 
     product = CompositeProduct(
         product_id=product_id or uuid.uuid4().hex,
-        topic=f"Base Network Pulse @ block {data['latest_block']}",
+        topic=f"{PULSE_TOPIC_PREFIX}{data['latest_block']}",
         cost_basis_usdc=0.0,  # quality input data is free to read
         price_usdc=price,
         markup=0.0,

@@ -176,6 +176,42 @@ class SwarmRegistry:
         self._products[product.product_id] = product
         self.save()
 
+    def prune_superseded(self, keep_id: str, topic_prefix: str) -> list[str]:
+        """Drop listings of the same product family that `keep_id` supersedes.
+
+        Republishing onto a *fresh* id (what `POST /pulse/publish` does) leaves
+        the previous listing behind, so a host that republished a few times
+        accumulates near-identical rows that clutter the storefront and make
+        `/swarm/products` misrepresent what is actually for sale.
+
+        Deliberately conservative — a row is only dropped when all of these
+        hold, so nothing that carries history or is still doing work is lost:
+          * it is not `keep_id` (never touch the pinned, cataloged listing),
+          * its topic starts with `topic_prefix` (same family, not a composite),
+          * it has earned nothing, and
+          * it is still `listed` (a sold row is a record of a real sale).
+
+        Returns the ids removed; saves once, only if something changed.
+        """
+        doomed = [
+            pid
+            for pid, p in self._products.items()
+            if pid != keep_id
+            and p.topic.startswith(topic_prefix)
+            and not p.revenue_usdc
+            and p.status == "listed"
+        ]
+        for pid in doomed:
+            del self._products[pid]
+        if doomed:
+            self.save()
+            log.info(
+                "swarm registry: pruned %d listing(s) superseded by %s",
+                len(doomed),
+                keep_id,
+            )
+        return doomed
+
     def get_product(self, product_id: str) -> CompositeProduct | None:
         return self._products.get(product_id)
 

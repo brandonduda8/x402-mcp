@@ -104,3 +104,33 @@ verification instead of a repo-wide `git status` of the parent tree.
   composite (`app/swarm/roles.py`) = x402-sourced cited Markdown research report
   synthesized from N paid upstream sources; `mn_compliance` = Minneapolis
   rental-license compliance by street address, JSON output.
+
+## 2026-08-02 — dashboard fixes + superseded-listing prune
+
+Found by looking at the deployed page rather than by a failing test:
+
+- `app/dashboard.py` — `#p-store` had a `<section>` but no `grid-area` rule, so
+  the Storefront panel fell into implicit grid placement instead of its own row.
+  Added `store`/`dist` areas; `tests/test_dashboard.py` now asserts every
+  `<section id="p-...">` has a matching rule.
+- `app/dashboard.py` — the tool-credits panel rendered "undefined → undefined":
+  it read `tc.payment_tool`/`tc.purchase_tool` while `/upgrade` returns
+  `x402_payment_tool`/`x402_purchase_tool`. The new test pins the field names
+  against the live `/upgrade` payload so a rename fails in CI, not on the page.
+- `app/dashboard.py` — new **Distribution** panel polling the public GitHub API
+  client-side (CORS-open, no token) for the outreach threads tracked in
+  `.github/workflows/thread-watch.yml`. Renders only structured fields via
+  `textContent` — never a fetched title or comment body — so content from repos
+  we do not control cannot inject markup. 60s cadence, skipped while hidden.
+- `app/dashboard.py` — quota panel gained a registered-agent picker off
+  `/stats`, surfacing that the tier system is live (52 real ids) while being
+  honest that every one of them is still at 0 calls.
+- `app/swarm/registry.py::prune_superseded` + `PULSE_TOPIC_PREFIX` in
+  `app/swarm/publisher.py` — republishing onto a *fresh* id (the manual
+  `POST /pulse/publish` escape hatch) leaves the previous row behind, and
+  production had accumulated **15 near-identical Pulse listings**, only one of
+  which had earned anything. Pruning runs at boot from `restore_pinned_listing`
+  and only drops a row when it is not the pinned id, is in the same topic
+  family, has earned nothing, and is still `listed` — so the cataloged listing,
+  anything with revenue, any sold row, and any composite are all untouchable.
+  `tests/test_registry_prune.py` pins each of those four guarantees.
