@@ -143,6 +143,21 @@ def _payment_info(amount: str) -> dict[str, Any]:
     }
 
 
+# The one input every paid route here takes, and for the cataloged purchase URL
+# the only one — its product id is baked into the path. An operation with no
+# declared inputs is "strict non-invocable" to x402scan and gets skipped rather
+# than listed, so declaring the header is what makes the endpoint callable as
+# well as visible. It is also the honest answer to "how do I construct this
+# call": sign the challenge, put it here.
+_PAYMENT_SIGNATURE_PARAM = {
+    "name": "PAYMENT-SIGNATURE",
+    "in": "header",
+    "required": False,
+    "description": "Signed x402 payment payload. Omit it to receive the 402 "
+    "challenge; sign that challenge and retry with it to be served.",
+    "schema": {"type": "string"},
+}
+
 _PAYMENT_REQUIRED_RESPONSE = {
     "description": "Payment required. The PAYMENT-REQUIRED header carries the "
     "x402 challenge: sign it and retry with PAYMENT-SIGNATURE.",
@@ -153,6 +168,15 @@ _PAYMENT_REQUIRED_RESPONSE = {
         }
     },
 }
+
+
+def _declare_paid(operation: dict[str, Any], amount: str) -> None:
+    """Mark one operation payable, and callable, in place."""
+    operation["x-payment-info"] = _payment_info(amount)
+    operation.setdefault("responses", {})["402"] = dict(_PAYMENT_REQUIRED_RESPONSE)
+    parameters = operation.setdefault("parameters", [])
+    if not any(p.get("name") == "PAYMENT-SIGNATURE" for p in parameters):
+        parameters.append(dict(_PAYMENT_SIGNATURE_PARAM))
 
 
 def tighten(schema: dict[str, Any]) -> dict[str, Any]:
@@ -172,10 +196,7 @@ def tighten(schema: dict[str, Any]) -> dict[str, Any]:
                 # Explicitly public, rather than merely undeclared.
                 operation["security"] = []
             else:
-                operation["x-payment-info"] = _payment_info(amount)
-                operation.setdefault("responses", {})["402"] = dict(
-                    _PAYMENT_REQUIRED_RESPONSE
-                )
+                _declare_paid(operation, amount)
         kept[path] = operations
 
     # A concrete purchase URL the templated route cannot express. Re-point the
@@ -196,10 +217,7 @@ def tighten(schema: dict[str, Any]) -> dict[str, Any]:
                 p for p in resolved.get("parameters", [])
                 if p.get("name") != "product_id"
             ]
-            resolved["x-payment-info"] = _payment_info(amount)
-            resolved.setdefault("responses", {})["402"] = dict(
-                _PAYMENT_REQUIRED_RESPONSE
-            )
+            _declare_paid(resolved, amount)
             concrete[method] = resolved
         if concrete:
             kept[path] = concrete

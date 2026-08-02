@@ -37,6 +37,16 @@ def test_every_paid_product_is_declared_payable(spec: dict) -> None:
         assert "402" in operation["responses"]
 
 
+def test_every_paid_endpoint_declares_an_input_an_agent_can_construct(spec: dict) -> None:
+    """No declared inputs means "strict non-invocable" to x402scan — listed but
+    skipped. The cataloged purchase URL has no query params at all once its
+    product id is baked into the path, so the payment header is the input."""
+    for path in openapi_spec.paid_paths():
+        names = [p["name"] for p in spec["paths"][path]["get"].get("parameters", [])]
+        assert names, f"{path} declares no inputs at all"
+        assert "PAYMENT-SIGNATURE" in names, f"{path} does not document how to pay"
+
+
 def test_prices_are_decimal_usd_not_atomic_units(spec: dict) -> None:
     """Atomic units where dollars belong is on x402scan's published list of
     common registration failures ($0.01 is "0.01" here, "10000" on the wire)."""
