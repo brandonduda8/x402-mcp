@@ -1,6 +1,11 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
-mcp>=1.6.0
+# Pin mcp below 2.0: the 2.0.0 release dropped `mcp.server.fastmcp`, which
+# app/mcp_server.py imports. Unpinned, CI installs 2.0.0 and every test that
+# imports app.main fails at collection — and a fresh Docker build of the
+# storefront would install it too and fail to boot. Lift this only together
+# with a real migration off FastMCP.
+mcp>=1.6.0,<2
 x402[httpx,evm,svm,fastapi]>=2.14.0
 eth-account>=0.13.0
 # Pin solana below 0.40: x402's SVM signer imports the sync solana.rpc.api.Client,
