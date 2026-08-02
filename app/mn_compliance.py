@@ -57,12 +57,23 @@ VIOLATION_FIELDS = (
 )
 CONDEMNED_FIELDS = "APN,Address,VBR_Date,CONB,Ward,Neighborho"
 
+# Written query-shaped, and this matters more here than anywhere else in the
+# repo: a discovery catalog indexes the description ONCE, at the settle that
+# first catalogs the resource, and never revisits it. The words below are the
+# only words a buying agent can match on. So it leads with the question a buyer
+# actually asks, names the locality the way people write it (Minneapolis /
+# Minnesota / Hennepin County), and names the jobs this gets hired for --
+# rather than describing the endpoint to another engineer.
+#
+# 500 chars is the CDP ceiling (_clamp_description); this sits under it.
 RESOURCE_DESCRIPTION = (
-    "Minneapolis rental-license compliance check: query by street address and "
-    "get the active rental license (status, tier, licensed units, expiration), "
-    "regulatory violation case history, and condemned/boarded status for that "
-    "property. Input: address string. Output: JSON. Live City of Minneapolis "
-    "open data (public records)."
+    "Is this Minneapolis rental property licensed and in compliance? Query any "
+    "street address in Minneapolis, Minnesota (Hennepin County) and get the "
+    "active rental license -- status, tier, licensed unit count, expiration -- "
+    "plus violation and code-enforcement case history, and whether "
+    "the property is condemned or boarded. For tenant screening, landlord and "
+    "property-manager due diligence, real-estate and lending checks. Input: "
+    "address string. Output: JSON, live City of Minneapolis open data."
 )
 
 

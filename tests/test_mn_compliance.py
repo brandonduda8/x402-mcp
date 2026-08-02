@@ -337,3 +337,33 @@ def test_paid_request_records_revenue_ledger_row(
     assert row["amount_usdc"] == 0.01
     assert row["tx"] == "0xfeed"
     assert row["settled"] is True
+
+
+def test_the_catalog_description_fits_and_carries_its_query_terms() -> None:
+    """A discovery catalog indexes this string ONCE, at the settle that first
+    catalogs the resource, and never revisits it. Over the CDP ceiling it is
+    truncated with "..."; missing a locality or job word and the buyer whose
+    query would have matched never sees it. Both failures are silent.
+    """
+    from app.x402_services import CDP_MAX_DESCRIPTION_CHARS
+
+    description = mn_compliance.RESOURCE_DESCRIPTION
+    assert len(description) <= CDP_MAX_DESCRIPTION_CHARS, (
+        f"{len(description)} chars would be truncated to "
+        f"{CDP_MAX_DESCRIPTION_CHARS} in the catalog"
+    )
+
+    lowered = description.lower()
+    for term in (
+        "minneapolis",      # the locality, spelled the way people write it
+        "minnesota",
+        "hennepin",
+        "rental license",   # what is actually being looked up
+        "violation",
+        "condemned",
+        "tenant",           # the jobs this gets hired for
+        "landlord",
+        "lending",
+        "json",             # what a machine gets back
+    ):
+        assert term in lowered, f"catalog description lost the query term {term!r}"
