@@ -65,15 +65,19 @@ main{display:grid;gap:1px;background:var(--line);
   grid-template-areas:
     "health health health health quota quota quota quota rev rev rev rev"
     "tools tools tools tools tools tools tools tools rev rev rev rev"
+    "store store store store store store store store store store store store"
+    "dist dist dist dist dist dist dist dist dist dist dist dist"
     "tape tape tape tape tape tape tape tape tape tape tape tape";
   border-bottom:1px solid var(--line);
 }
 @media (max-width:960px){
-  main{grid-template-columns:1fr;grid-template-areas:"health" "quota" "tools" "rev" "tape"}
+  main{grid-template-columns:1fr;grid-template-areas:"health" "quota" "tools" "rev" "store" "dist" "tape"}
 }
 section{background:var(--panel);padding:14px 18px 18px;min-width:0}
 #p-health{grid-area:health}#p-quota{grid-area:quota}
-#p-tools{grid-area:tools}#p-rev{grid-area:rev}#p-tape{grid-area:tape;background:var(--panel-2)}
+#p-tools{grid-area:tools}#p-rev{grid-area:rev}
+#p-store{grid-area:store}#p-dist{grid-area:dist}
+#p-tape{grid-area:tape;background:var(--panel-2)}
 h2{font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;
   color:var(--dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
 h2::after{content:"";flex:1;height:1px;background:var(--line)}
@@ -118,6 +122,7 @@ td .req{display:inline-block;border:1px solid var(--line);color:var(--dim);
   padding:0 6px;font-size:10.5px;letter-spacing:.06em;margin:0 6px 2px 0}
 td .req.on{border-color:var(--green);color:var(--green)}
 td .req.off{border-color:var(--red);color:var(--red)}
+td.ok{color:var(--green)} td.err{color:var(--red)}
 .chip{display:inline-block;border:1px solid var(--amber-dim);color:var(--amber);
   padding:0 7px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase}
 .chip.pro{border-color:var(--green);color:var(--green)}
@@ -234,6 +239,15 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
       <thead><tr><th>Demand (402s served)</th><th>Views</th><th>Sold in window</th></tr></thead>
       <tbody id="demand-body"><tr><td class="env" colspan="3">Loading demand…</td></tr></tbody>
     </table>
+  </section>
+
+  <section id="p-dist">
+    <h2>Distribution <span class="count" id="dist-count"></span></h2>
+    <table>
+      <thead><tr><th>Outreach thread</th><th>State</th><th>Updated</th></tr></thead>
+      <tbody id="dist-body"><tr><td class="env" colspan="3">Loading threads…</td></tr></tbody>
+    </table>
+    <p class="hint">Read from the public GitHub API, client-side. "closed" only means merged when the badge says so — some maintainers apply a PR by hand and leave it showing closed; open the thread to check.</p>
   </section>
 
   <section id="p-tape">
@@ -447,6 +461,54 @@ async function pollStore(){
   }catch(e){ tape("err", e.message); }
 }
 
+/* ---- distribution: outreach PR/issue threads on OTHER repos, read straight
+   from the public GitHub REST API (CORS-open for public data, no token
+   needed). Keep this list in sync with .github/workflows/thread-watch.yml's
+   THREADS env — that workflow alerts on new activity, this just shows
+   current state. Renders only structured fields (state/comments/date) via
+   textContent, never a fetched title or comment body, so third-party repo
+   content can't inject markup into this page. */
+const OUTREACH_THREADS = [
+  {repo: "BankrBot/skills", num: 588, label: "BankrBot/skills PR #588"},
+  {repo: "Haustorium12/gold-402", num: 58, label: "gold-402 PR #58"},
+];
+
+async function loadDistribution(){
+  if (document.hidden) return;
+  const rows = await Promise.all(OUTREACH_THREADS.map(async (t) => {
+    try{
+      const pr = await getJSON(`https://api.github.com/repos/${t.repo}/pulls/${t.num}`);
+      const state = pr.merged ? "merged" : pr.state === "open" ? "open" : "closed";
+      return {...t, state, comments: pr.comments ?? 0, updated: pr.updated_at, url: pr.html_url};
+    }catch(e){
+      return {...t, state: "error", comments: 0, updated: null, url: null};
+    }
+  }));
+  $("dist-count").textContent = `· ${rows.length}`;
+  const body = $("dist-body");
+  body.innerHTML = "";
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    const tdLabel = document.createElement("td");
+    const tdState = document.createElement("td");
+    const tdUpdated = document.createElement("td");
+    tdUpdated.className = "env";
+    const a = document.createElement("a");
+    a.textContent = r.label;
+    if (r.url){ a.href = r.url; a.target = "_blank"; a.rel = "noopener"; }
+    tdLabel.appendChild(a);
+    tdState.className = r.state === "merged" ? "ok" : r.state === "open" ? "tool"
+      : r.state === "error" ? "err" : "env";
+    tdState.textContent = r.state === "closed"
+      ? `closed · ${r.comments} comment${r.comments === 1 ? "" : "s"}`
+      : r.state;
+    tdUpdated.textContent = r.updated ? r.updated.slice(0, 10) : "—";
+    tr.append(tdLabel, tdState, tdUpdated);
+    body.appendChild(tr);
+  });
+  tape("ok", `distribution poll — ${rows.length} outreach threads checked`);
+}
+
 async function loadManifest(){
   try{
     const m = await getJSON("/.well-known/mcp");
@@ -502,11 +564,12 @@ document.addEventListener("keydown", (e) => {
 });
 
 tick(); setInterval(tick, 1000);
-(async () => { await loadManifest(); loadUpgrade(); pollHealth(); pollQuota(); pollStore(); })();
+(async () => { await loadManifest(); loadUpgrade(); pollHealth(); pollQuota(); pollStore(); loadDistribution(); })();
 setInterval(pollHealth, 5000);
 setInterval(pollQuota, 5000);
 setInterval(pollStore, 30000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) pollStore(); });
+setInterval(loadDistribution, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollStore(); loadDistribution(); } });
 </script>
 </body>
 </html>

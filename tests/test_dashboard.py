@@ -68,3 +68,43 @@ def test_storefront_poll_is_throttled_and_visibility_gated() -> None:
     html = client.get("/dashboard").text
     assert "setInterval(pollStore, 30000)" in html
     assert "if (document.hidden) return;" in html
+
+
+def test_named_grid_areas_cover_every_section() -> None:
+    """Every <section id="p-..."> must have a matching #p-... grid-area rule.
+
+    Regression guard: p-store previously had no grid-area at all and fell
+    into implicit grid placement instead of its own row.
+    """
+    html = client.get("/dashboard").text
+    import re
+
+    section_ids = re.findall(r'<section id="(p-[a-z]+)"', html)
+    assert section_ids, "expected at least one dashboard section"
+    for section_id in section_ids:
+        assert f"#{section_id}{{grid-area:" in html, f"{section_id} has no grid-area rule"
+
+
+def test_distribution_panel_is_rendered() -> None:
+    """The outreach panel needs the element ids its poller writes into."""
+    html = client.get("/dashboard").text
+    for element_id in ("dist-count", "dist-body"):
+        assert f'id="{element_id}"' in html
+
+
+def test_distribution_poll_is_throttled_and_visibility_gated() -> None:
+    """GitHub's API is rate-limited per IP — keep this slower than health/quota
+    and skip it on a hidden tab, same rule as pollStore."""
+    html = client.get("/dashboard").text
+    assert "setInterval(loadDistribution, 60000)" in html
+    assert "async function loadDistribution(){\n  if (document.hidden) return;" in html
+
+
+def test_distribution_never_renders_fetched_text_as_html() -> None:
+    """Outreach threads live on repos we don't control — their titles/comment
+    bodies must never reach innerHTML, only our own hardcoded labels and
+    structured (state/count/date) fields via textContent."""
+    html = client.get("/dashboard").text
+    assert "pr.title" not in html
+    assert "pr.body" not in html
+    assert "a.textContent = r.label" in html
