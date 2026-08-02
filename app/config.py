@@ -125,6 +125,18 @@ class Settings(BaseSettings):
     # external sale apart from the operator paying itself — revenue rows are
     # otherwise indistinguishable by amount or agent_id alone.
     operator_wallets: str = ""
+    # Published in the OpenAPI document as info.contact.email. x402scan uses it
+    # to verify origin ownership and shows it to buyers as the operator contact;
+    # it is public and scrapeable by design, so keep it an address the operator
+    # is happy to publish.
+    contact_email: str = "kwizzlesurp10@gmail.com"
+    # Comma-separated signatures proving the operator controls this origin.
+    # x402scan reads these from OpenAPI `x-discovery.ownershipProofs` (preferred)
+    # or the /.well-known/x402 fan-out, and upgrades a listing from "anyone can
+    # submit a URL" to ownership-verified. Empty by default: producing one means
+    # signing with the receive wallet's key, which only the operator can do —
+    # never the assistant, and never from this box.
+    ownership_proofs: str = ""
     swarm_target_ltv_cac: float = 3.0  # target revenue/cost ratio; also the min pricing multiple
     swarm_min_margin_ratio: float = 0.5  # floor on margin/price
     # Network the merchant lists composites on. Must be one the seller facilitator

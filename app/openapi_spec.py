@@ -224,8 +224,18 @@ def tighten(schema: dict[str, Any]) -> dict[str, Any]:
 
     schema["paths"] = kept
     schema["info"]["x-guidance"] = GUIDANCE
+    # x402scan verifies origin ownership from info.contact.email and shows it to
+    # buyers as the way to reach the operator about an outage or a price change.
+    # A URL alone does not satisfy that check. Operator-approved 2026-08-02.
     schema["info"]["contact"] = {
-        "url": "https://github.com/kwizzlesurp10-ctrl/x402-mcp/issues"
+        "email": settings.contact_email,
+        "url": "https://github.com/kwizzlesurp10-ctrl/x402-mcp/issues",
     }
     schema["servers"] = [{"url": settings.public_base_url.rstrip("/")}]
+
+    # x402scan's preferred home for ownership proofs, ahead of the well-known
+    # fan-out. Only present once the operator has actually signed one.
+    proofs = agent_surface.ownership_proofs()
+    if proofs:
+        schema["x-discovery"] = {"ownershipProofs": proofs}
     return schema

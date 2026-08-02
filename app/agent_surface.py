@@ -22,6 +22,17 @@ def _base() -> str:
     return settings.public_base_url.rstrip("/")
 
 
+def ownership_proofs() -> list[str]:
+    """Signatures proving the operator controls this origin, if any exist.
+
+    A directory will list a URL anyone submits; an ownership proof is what
+    distinguishes the operator's listing from a stranger's. Producing one
+    requires the receive wallet's key, so this stays empty until the operator
+    sets it — the deployment simply advertises without the proof until then.
+    """
+    return [p.strip() for p in settings.ownership_proofs.split(",") if p.strip()]
+
+
 def paid_resources() -> list[dict[str, Any]]:
     """Every paid HTTP resource this deployment serves, priced from live config."""
     base = _base()
@@ -98,6 +109,9 @@ def well_known_x402() -> dict[str, Any]:
         "receipt_header": "PAYMENT-RESPONSE",
         "resources": [r["url"] for r in paid_resources() if r["price"] != "free"],
         "resource_details": paid_resources(),
+        # Omitted entirely rather than sent empty: an empty proofs array reads
+        # as a failed proof, absence reads as "not claimed yet".
+        **({"ownershipProofs": ownership_proofs()} if ownership_proofs() else {}),
         "mcp": {
             "manifest": f"{_base()}/.well-known/mcp",
             "streamable_http": f"{_base()}/mcp/mcp",

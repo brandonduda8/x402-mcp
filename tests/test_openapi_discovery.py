@@ -99,6 +99,9 @@ def test_agents_get_the_payment_flow_without_reading_our_docs(spec: dict) -> Non
     guidance = spec["info"]["x-guidance"]
     assert "PAYMENT-REQUIRED" in guidance and "PAYMENT-SIGNATURE" in guidance
     assert "/llms.txt" in guidance
+    # x402scan verifies ownership from the email specifically; a url alone does not.
+    assert spec["info"]["contact"]["email"] == settings.contact_email
+    assert "@" in spec["info"]["contact"]["email"]
     assert spec["info"]["contact"]["url"]
     assert spec["servers"][0]["url"] == settings.public_base_url.rstrip("/")
 
@@ -116,6 +119,23 @@ def test_no_pinned_product_means_no_advertised_purchase_url(monkeypatch) -> None
     """Advertising a listing that may not exist earns "expected 402, got 404"."""
     monkeypatch.setattr(settings, "pinned_pulse_product_id", "")
     assert not [p for p in openapi_spec.paid_paths() if p.endswith("/purchase")]
+
+
+def test_an_unsigned_deployment_claims_no_ownership(spec: dict) -> None:
+    """Absence means "not claimed yet"; an empty array reads as a failed proof."""
+    if not settings.ownership_proofs:
+        assert "x-discovery" not in spec
+        assert "ownershipProofs" not in client.get("/.well-known/x402").json()
+
+
+def test_a_signed_deployment_publishes_the_proof_in_both_documents(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "ownership_proofs", "0xdeadbeef, 0xfeedface")
+
+    assert client.get("/openapi.json").json()["x-discovery"] == {
+        "ownershipProofs": ["0xdeadbeef", "0xfeedface"]
+    }
+    body = client.get("/.well-known/x402").json()
+    assert body["ownershipProofs"] == ["0xdeadbeef", "0xfeedface"]
 
 
 @pytest.mark.parametrize(
