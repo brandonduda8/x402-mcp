@@ -226,6 +226,7 @@ def build_report() -> dict[str, Any]:
     0 rather than being absent. Conversion is None until at least one challenge
     has been served — a ratio over zero views says nothing.
     """
+    from app import ledger_io
     from app.ledger_io import read_ledger_rows
 
     served = challenges()
@@ -243,6 +244,19 @@ def build_report() -> dict[str, Any]:
     paid: Counter[str] = Counter()
     revenue: Counter[str] = Counter()
     counted: Counter[str] = Counter()  # sales inside the measured window only
+    # Split the in-window sales by who paid. An operator settle is this project
+    # cataloging its own resource, not a customer — counting those as sales is
+    # what reported mn-property-check at 4% conversion when its confirmed
+    # external sales were zero. Unknown is never folded into external.
+    counted_external: Counter[str] = Counter()
+    counted_operator: Counter[str] = Counter()
+    counted_unknown: Counter[str] = Counter()
+
+    try:
+        operator_wallets = ledger_io.operator_wallet_set()
+    except Exception:  # never raise into a request path
+        operator_wallets = set()
+
     for row in read_ledger_rows("revenue", limit=None):
         if not row.get("settled", True):
             continue
@@ -252,6 +266,16 @@ def build_report() -> dict[str, Any]:
         row_dt = _parse_ts(str(row.get("ts") or ""))
         if since_dt and row_dt and row_dt >= since_dt:
             counted[key] += 1
+            try:
+                is_operator = ledger_io.classify_operator_settle(row, operator_wallets)
+            except Exception:  # a malformed row is unknown, never external
+                is_operator = None
+            if is_operator is True:
+                counted_operator[key] += 1
+            elif is_operator is False:
+                counted_external[key] += 1
+            else:
+                counted_unknown[key] += 1
 
     rows = []
     for key in sorted(set(served) | set(paid)):
@@ -270,11 +294,22 @@ def build_report() -> dict[str, Any]:
                 "clients": by_client,
                 "sales_settled": sales,
                 "sales_in_window": counted.get(key, 0),
+                # Who actually paid, inside the window. external is the only
+                # one of the three that means a customer bought something.
+                "sales_external": counted_external.get(key, 0),
+                "sales_operator": counted_operator.get(key, 0),
+                "sales_unknown": counted_unknown.get(key, 0),
                 "user_agents": uas.get(key, []),
                 "revenue_usdc": round(revenue.get(key, 0.0), 6),
                 # Only sales inside the measured window, so this can never
                 # exceed 1.0 by comparing old sales against new views.
+                # External-only: a self-settle is not a conversion.
                 "conversion": (
+                    round(counted_external.get(key, 0) / views, 4) if views else None
+                ),
+                # The old formula, retained so this correction is auditable
+                # rather than a silent restatement of history.
+                "conversion_including_operator": (
                     round(counted.get(key, 0) / views, 4) if views else None
                 ),
                 "last_challenge_at": seen.get(key),
@@ -286,6 +321,9 @@ def build_report() -> dict[str, Any]:
     total_qualified = sum(r["qualified_views"] for r in rows)
     total_sales = sum(paid.values())
     total_in_window = sum(counted.values())
+    total_external = sum(counted_external.values())
+    total_operator = sum(counted_operator.values())
+    total_unknown = sum(counted_unknown.values())
     return {
         "resources": rows,
         "total_challenges_served": total_views,
@@ -293,7 +331,13 @@ def build_report() -> dict[str, Any]:
         "total_sales_settled": total_sales,
         "counting_since": since,
         "total_sales_in_window": total_in_window,
+        "total_sales_external": total_external,
+        "total_sales_operator": total_operator,
+        "total_sales_unknown": total_unknown,
         "overall_conversion": (
+            round(total_external / total_views, 4) if total_views else None
+        ),
+        "overall_conversion_including_operator": (
             round(total_in_window / total_views, 4) if total_views else None
         ),
         "note": (
@@ -301,6 +345,10 @@ def build_report() -> dict[str, Any]:
             "excludes crawlers, bare browsers and unidentified traffic (see "
             "clients). Read qualified_views, not challenges_served, as demand: "
             "qualified with no sales is a price/product signal; zero qualified "
-            "is a discovery signal even if challenges_served is high."
+            "is a discovery signal even if challenges_served is high. "
+            "conversion counts EXTERNAL payers only — an operator self-settle "
+            "(cataloging a resource) is not a sale, and sales_unknown is never "
+            "folded into external. Compare against "
+            "conversion_including_operator to see what the old formula said."
         ),
     }

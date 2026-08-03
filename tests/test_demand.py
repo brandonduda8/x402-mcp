@@ -33,12 +33,27 @@ def redis_backed(monkeypatch):
     )
 
 
+OPERATOR = "0x67ffc9b4390000000000000000000000000000ab"
+EXTERNAL = "0x7e81988b710000000000000000000000000000cd"
+
+
 @pytest.fixture
 def ledger(tmp_path, monkeypatch):
     d = tmp_path / "ledger"
     d.mkdir()
     monkeypatch.setattr(ledger_io, "LEDGER", d)
     return d
+
+
+@pytest.fixture
+def operator_configured(monkeypatch):
+    """Production has OPERATOR_WALLETS set (render.yaml:60-61).
+
+    Without it every row classifies as unknown, and conversion — which counts
+    external payers only — reads 0.0. Tests that assert a non-zero conversion
+    must therefore both configure this and name a payer.
+    """
+    monkeypatch.setattr(settings, "operator_wallets", OPERATOR)
 
 
 def test_counts_accumulate_per_resource() -> None:
@@ -77,7 +92,7 @@ def test_an_empty_key_is_ignored() -> None:
     assert demand.challenges() == {}
 
 
-def test_report_joins_challenges_to_settled_sales(ledger) -> None:
+def test_report_joins_challenges_to_settled_sales(ledger, operator_configured) -> None:
     for _ in range(10):
         demand.record_challenge("pulse-1")
     demand.record_challenge("ignored-by-everyone")
@@ -87,6 +102,7 @@ def test_report_joins_challenges_to_settled_sales(ledger) -> None:
         network="eip155:8453",
         product_id="pulse-1",
         tx="0xabc",
+        payer=EXTERNAL,
     )
 
     report = demand.build_report()
@@ -129,7 +145,9 @@ def test_sales_predating_the_counter_do_not_inflate_conversion(ledger) -> None:
     assert row["conversion"] <= 1.0
 
 
-def test_conversion_can_exceed_one_when_a_challenge_is_reused(ledger) -> None:
+def test_conversion_can_exceed_one_when_a_challenge_is_reused(
+    ledger, operator_configured
+) -> None:
     """Not a bug, and worth pinning so nobody "fixes" it by clamping.
 
     A buyer may cache a PAYMENT-REQUIRED header and settle against it more than
@@ -145,6 +163,7 @@ def test_conversion_can_exceed_one_when_a_challenge_is_reused(ledger) -> None:
             network="eip155:8453",
             product_id="pulse-1",
             tx=f"0x{i}",
+            payer=EXTERNAL,
         )
 
     row = next(
@@ -185,6 +204,132 @@ def test_unsettled_revenue_rows_are_not_counted_as_sales(ledger) -> None:
     rows = {r["resource"]: r for r in demand.build_report()["resources"]}
 
     assert rows["pulse-1"]["sales_settled"] == 0
+
+
+# --- an operator self-settle is not a sale --------------------------------------
+
+
+def test_operator_settles_do_not_count_as_conversion(ledger, operator_configured) -> None:
+    """The live bug this split was written for.
+
+    mn-property-check reported 4% conversion on the strength of three settles
+    the operator ran to get the resource catalogued. The CDP Bazaar's own
+    quality block disagreed the whole time (l30DaysUniquePayers: 1).
+    """
+    for _ in range(100):
+        demand.record_challenge("mn-property-check")
+    for i in range(3):
+        ledger_writer.record_revenue(
+            agent_id="seller",
+            amount_usdc=0.01,
+            network="eip155:8453",
+            product_id="mn-property-check",
+            tx=f"0xcatalog{i}",
+            payer=OPERATOR,
+        )
+
+    row = next(
+        r
+        for r in demand.build_report()["resources"]
+        if r["resource"] == "mn-property-check"
+    )
+
+    assert row["sales_operator"] == 3
+    assert row["sales_external"] == 0
+    assert row["conversion"] == 0.0
+    # The old number is retained so the correction is auditable.
+    assert row["conversion_including_operator"] == 0.03
+
+
+def test_an_external_sale_still_converts(ledger, operator_configured) -> None:
+    for _ in range(10):
+        demand.record_challenge("base-tx-decision")
+    ledger_writer.record_revenue(
+        agent_id="seller",
+        amount_usdc=0.01,
+        network="eip155:8453",
+        product_id="base-tx-decision",
+        tx="0xreal",
+        payer=EXTERNAL,
+    )
+
+    row = next(
+        r
+        for r in demand.build_report()["resources"]
+        if r["resource"] == "base-tx-decision"
+    )
+
+    assert row["sales_external"] == 1
+    assert row["sales_operator"] == 0
+    assert row["conversion"] == 0.1
+
+
+def test_a_payerless_row_is_unknown_never_external(ledger, operator_configured) -> None:
+    """Most of this project's revenue history predates payer threading."""
+    for _ in range(10):
+        demand.record_challenge("pulse-1")
+    ledger_writer.record_revenue(
+        agent_id="seller",
+        amount_usdc=0.05,
+        network="eip155:8453",
+        product_id="pulse-1",
+        tx="0xold",
+    )
+
+    row = next(
+        r for r in demand.build_report()["resources"] if r["resource"] == "pulse-1"
+    )
+
+    assert row["sales_unknown"] == 1
+    assert row["sales_external"] == 0
+    assert row["conversion"] == 0.0  # not None, and not 0.1
+
+
+def test_without_operator_wallets_every_row_is_unknown(ledger, monkeypatch) -> None:
+    """Fail closed: an unconfigured box must not report self-settles as sales."""
+    monkeypatch.setattr(settings, "operator_wallets", "")
+    for _ in range(10):
+        demand.record_challenge("pulse-1")
+    ledger_writer.record_revenue(
+        agent_id="seller",
+        amount_usdc=0.05,
+        network="eip155:8453",
+        product_id="pulse-1",
+        tx="0xabc",
+        payer=EXTERNAL,
+    )
+
+    row = next(
+        r for r in demand.build_report()["resources"] if r["resource"] == "pulse-1"
+    )
+
+    assert row["sales_unknown"] == 1
+    assert row["sales_external"] == 0
+    assert row["conversion"] == 0.0
+
+
+def test_the_three_splits_always_sum_to_sales_in_window(
+    ledger, operator_configured
+) -> None:
+    demand.record_challenge("pulse-1")
+    for payer in (OPERATOR, EXTERNAL, None):
+        ledger_writer.record_revenue(
+            agent_id="seller",
+            amount_usdc=0.05,
+            network="eip155:8453",
+            product_id="pulse-1",
+            tx=f"0x{payer}",
+            payer=payer,
+        )
+
+    row = next(
+        r for r in demand.build_report()["resources"] if r["resource"] == "pulse-1"
+    )
+
+    assert (
+        row["sales_external"] + row["sales_operator"] + row["sales_unknown"]
+        == row["sales_in_window"]
+    )
 
 
 # --- the live 402 paths must actually record -----------------------------------
