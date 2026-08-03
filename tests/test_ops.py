@@ -26,7 +26,16 @@ def test_stats_snapshot() -> None:
     assert body["config"]["free_tier_monthly_quota"] == 500
 
 
-def test_ledger_spend_empty() -> None:
+def test_ledger_spend_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An absent ledger file reads as [], not as an error.
+
+    Pointed at an isolated dir rather than the repo's own ledger/: that holds
+    real payment records on an operator machine, so asserting against it made
+    this test pass only on a clean checkout and fail for anyone who had
+    actually used the thing.
+    """
+    monkeypatch.setattr(ledger_io, "LEDGER", tmp_path / "ledger")
+
     response = client.get("/ledger/spend")
     assert response.status_code == 200
     body = response.json()

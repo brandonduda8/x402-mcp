@@ -138,7 +138,7 @@ curl.exe -s -o NUL -w "%{http_code}\n" -H "x-demand-ignore: 1" "https://x402-mcp
 curl.exe -s "https://x402-mcp.onrender.com/health"                                                                 # wallet_configured must be false
 ```
 
-In repo A, expect ~4 known local failures when `.env` holds a real key. Confirm with `git stash` before blaming a change.
+Both suites are green on an operator machine (repo B 432 passed, repo A 96). The only environment-dependent failures left are the "missing wallet" tests in `test_mcp_tools` / `test_x402_services`, which assert unconfigured behaviour and so fail when `.env` holds a real key. If you hit anything else, confirm with `git stash` before blaming a change — and if a test fails because of real local state rather than a real defect, **fix the test's isolation rather than documenting the failure.**
 
 # Claude-in-Chrome
 
