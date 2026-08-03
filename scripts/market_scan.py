@@ -13,7 +13,7 @@ endpoints and earning $0.00, while another earned from 23,368 calls by a
 single payer. Endpoint count is not a growth lever on this rail.
 
 Operator tooling. Read-only, unauthenticated, spends nothing, writes nothing.
-Deliberately a script and not a route — app/openapi_spec.py is an allowlist and
+Deliberately a script and not a route - app/openapi_spec.py is an allowlist and
 a new route would be private by default.
 
     .venv\\Scripts\\python.exe scripts/market_scan.py --query property --top 20
@@ -156,7 +156,7 @@ def main() -> int:
         help=(
             "origin to match this repo's own listings against. Defaults to "
             "PUBLIC_BASE_URL, which is localhost on an operator machine and "
-            "will match nothing — pass the deployed origin."
+            "will match nothing - pass the deployed origin."
         ),
     )
     args = parser.parse_args()
