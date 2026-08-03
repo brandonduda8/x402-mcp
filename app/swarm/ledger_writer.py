@@ -47,8 +47,23 @@ def record_spend(
     run_id: str,
     tx: str | None = None,
     settled: bool = False,
+    amount_source: str | None = None,
 ) -> dict[str, Any]:
-    """Record an upstream purchase (buy side / cost basis)."""
+    """Record an upstream purchase (buy side / cost basis).
+
+    `amount_source` says where `amount_usdc` came from, because not every
+    caller can recover the exact charge:
+
+    - ``"settlement"`` — the facilitator's own settled amount. Exact.
+    - ``"authorized"`` — the amount the buyer signed for in the selected
+      payment requirements. Exact absent a partial settlement.
+    - ``"cap_upper_bound"`` — no real amount was recoverable and a spend *cap*
+      was recorded instead. The true charge is at most this. Warden reads this
+      ledger for its daily/monthly caps (app/swarm/policy.py:65-83), so an
+      overstatement here wrongly refuses later purchases — flagging it beats
+      silently claiming precision.
+    - ``None`` — legacy/unspecified (rows written before this field existed).
+    """
     row = {
         "ts": datetime.now(UTC).isoformat(),
         "kind": "spend",
@@ -56,6 +71,7 @@ def record_spend(
         "network": network,
         "amount_usdc": round(amount_usdc, 6),
         "amount_usdc_atomic": _atomic(amount_usdc),
+        "amount_source": amount_source,
         "tx": tx,
         "settled": settled,
         "url": url,

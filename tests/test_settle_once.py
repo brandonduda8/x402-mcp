@@ -8,10 +8,13 @@ actually try to spend.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from app.models import PayAndFetchInput
-from scripts.settle_once import _extract_tx, parse_args
+from scripts import settle_once
+from scripts.settle_once import CAP_SOURCE, _extract_tx, parse_args, resolve_amount
 
 
 def _input_from(args) -> PayAndFetchInput:
@@ -66,3 +69,145 @@ def test_tx_is_pulled_from_any_of_the_facilitator_spellings() -> None:
     assert _extract_tx({"transactionHash": "0xc"}) == "0xc"
     assert _extract_tx({}) is None
     assert _extract_tx(None) is None
+
+
+# ---------------------------------------------------------------------------
+# The ledger records what was CHARGED, not the cap. warden computes its
+# daily/monthly caps off this ledger (app/swarm/policy.py:65-83), so recording
+# a $0.01 ceiling for a $0.001 resource compounds into refused future buys.
+# ---------------------------------------------------------------------------
+
+
+def test_the_charged_amount_is_recorded_not_the_cap() -> None:
+    amount, source = resolve_amount(
+        {"amount_charged_usdc": 0.001, "amount_charged_source": "settlement"},
+        cap_usdc=0.01,
+    )
+
+    assert amount == 0.001  # ten times less than the cap
+    assert source == "settlement"
+
+
+def test_an_authorized_amount_is_used_when_the_facilitator_gave_none() -> None:
+    amount, source = resolve_amount(
+        {"amount_charged_usdc": 0.005, "amount_charged_source": "authorized"},
+        cap_usdc=0.01,
+    )
+
+    assert (amount, source) == (0.005, "authorized")
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {},
+        {"amount_charged_usdc": None, "amount_charged_source": None},
+        {"amount_charged_usdc": None, "amount_charged_source": "settlement"},
+        {"amount_charged_usdc": "not-a-number", "amount_charged_source": "settlement"},
+    ],
+)
+def test_an_unrecoverable_amount_falls_back_to_a_flagged_upper_bound(result) -> None:
+    """Falling back to the cap is allowed; pretending it is the real charge
+    is not — the row has to say it is only an upper bound."""
+    amount, source = resolve_amount(result, cap_usdc=0.01)
+
+    assert amount == 0.01
+    assert source == CAP_SOURCE
+
+
+def _run_main(monkeypatch, pay_result: dict, argv: list[str]) -> list[dict]:
+    """Drive settle_once.main with the network and the ledger stubbed out."""
+    recorded: list[dict] = []
+
+    async def fake_pay_and_fetch(_params):
+        return pay_result
+
+    monkeypatch.setattr(settle_once.x402_services, "pay_and_fetch", fake_pay_and_fetch)
+    monkeypatch.setattr(
+        settle_once.ledger_writer,
+        "record_spend",
+        lambda **kw: recorded.append(kw),
+    )
+    settle_once.main_rc = asyncio.run(settle_once.main(argv))
+    return recorded
+
+
+ARGV = ["--url", "https://example.test/r", "--max-usdc", "0.01"]
+
+
+def test_a_settled_run_ledgers_the_real_charge(monkeypatch) -> None:
+    recorded = _run_main(
+        monkeypatch,
+        {
+            "status_code": 200,
+            "payment_settled": True,
+            "payment_settlement": {"transaction": "0xabc"},
+            "amount_charged_usdc": 0.001,
+            "amount_charged_source": "settlement",
+        },
+        ARGV,
+    )
+
+    assert len(recorded) == 1
+    assert recorded[0]["amount_usdc"] == 0.001
+    assert recorded[0]["amount_source"] == "settlement"
+    assert recorded[0]["settled"] is True
+    assert settle_once.main_rc == 0
+
+
+def test_a_settled_run_with_no_recoverable_amount_flags_the_cap(monkeypatch) -> None:
+    recorded = _run_main(
+        monkeypatch,
+        {
+            "status_code": 200,
+            "payment_settled": True,
+            "payment_settlement": {"transaction": "0xabc"},
+            "amount_charged_usdc": None,
+            "amount_charged_source": None,
+        },
+        ARGV,
+    )
+
+    assert recorded[0]["amount_usdc"] == 0.01
+    assert recorded[0]["amount_source"] == CAP_SOURCE
+
+
+def test_an_unsettled_run_still_records_nothing(monkeypatch) -> None:
+    """Unchanged behaviour, re-pinned: no funds moved, no ledger row."""
+    recorded = _run_main(
+        monkeypatch,
+        {
+            "status_code": 402,
+            "payment_settled": False,
+            "payment_settlement": None,
+            "amount_charged_usdc": None,
+            "amount_charged_source": None,
+        },
+        ARGV,
+    )
+
+    assert recorded == []
+    assert settle_once.main_rc == 1
+
+
+def test_the_cap_still_caps(monkeypatch) -> None:
+    """--max-usdc keeps its meaning: it is passed through to pay_and_fetch as
+    the hard refusal ceiling, and is not what gets ledgered."""
+    seen: dict = {}
+
+    async def fake_pay_and_fetch(params):
+        seen["max"] = params.max_price_usdc
+        return {
+            "status_code": 200,
+            "payment_settled": True,
+            "payment_settlement": {"transaction": "0xabc"},
+            "amount_charged_usdc": 0.002,
+            "amount_charged_source": "authorized",
+        }
+
+    monkeypatch.setattr(settle_once.x402_services, "pay_and_fetch", fake_pay_and_fetch)
+    monkeypatch.setattr(settle_once.ledger_writer, "record_spend", lambda **kw: kw)
+
+    asyncio.run(settle_once.main(ARGV))
+
+    assert seen["max"] == 0.01

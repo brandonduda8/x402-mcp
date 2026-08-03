@@ -9,7 +9,8 @@ way in — for a self-owned resource the money moves between your own wallets.
 Safety: pays through the sole spender (x402_services.pay_and_fetch) with
 max_price_usdc as a hard cap, so a resource that asks for more is refused rather
 than paid. Nothing is written to the ledger unless the payment actually settled
-on-chain.
+on-chain, and the row records what was *charged* — not the cap (see
+resolve_amount).
 
   python scripts/settle_once.py --url https://host/resource --max-usdc 0.01
   python scripts/settle_once.py --url https://host/search --method POST \
@@ -31,6 +32,10 @@ from app.swarm import ledger_writer
 
 SETTLEMENT_TX_KEYS = ("transaction", "txHash", "tx_hash", "transactionHash", "tx")
 
+# Recorded as `amount_source` when the real charge could not be recovered and
+# --max-usdc had to stand in for it. See ledger_writer.record_spend.
+CAP_SOURCE = "cap_upper_bound"
+
 
 def _extract_tx(settlement: object) -> str | None:
     if not isinstance(settlement, dict):
@@ -39,6 +44,27 @@ def _extract_tx(settlement: object) -> str | None:
         if settlement.get(key):
             return str(settlement[key])
     return None
+
+
+def resolve_amount(result: dict, cap_usdc: float) -> tuple[float, str]:
+    """(amount_usdc, amount_source) for the spend row of a settled purchase.
+
+    --max-usdc is a *cap*, not a price: a resource that charges $0.001 under a
+    $0.01 cap costs a cent in the ledger if the cap is recorded, and warden
+    computes its daily/monthly spend caps off exactly that ledger — so the
+    error compounds into wrongly-refused future buys. pay_and_fetch reports the
+    real charge (facilitator settled amount, else the amount the buyer signed
+    for). Only when neither is recoverable does the cap stand in, and then the
+    row says so rather than claiming a precision it doesn't have.
+    """
+    charged = result.get("amount_charged_usdc")
+    source = result.get("amount_charged_source")
+    if charged is None or not source:
+        return cap_usdc, CAP_SOURCE
+    try:
+        return float(charged), str(source)
+    except (TypeError, ValueError):
+        return cap_usdc, CAP_SOURCE
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -104,16 +130,29 @@ async def main(argv: list[str] | None = None) -> int:
         print("[settle] no funds moved, nothing recorded. Transient 502s retry fine.")
         return 1
 
+    amount, amount_source = resolve_amount(result, args.max_usdc)
     ledger_writer.record_spend(
         agent_id=agent_id,
-        amount_usdc=args.max_usdc,
+        amount_usdc=amount,
         network=args.network,
         url=args.url,
         run_id=run_id,
         tx=tx,
         settled=True,
+        amount_source=amount_source,
     )
-    print(f"[settle] SETTLED ${args.max_usdc:.6f} USDC, recorded to ledger.")
+    if amount_source == CAP_SOURCE:
+        print(
+            f"[settle] SETTLED, but the charged amount was not recoverable; "
+            f"recorded the ${args.max_usdc:.6f} cap as an UPPER BOUND "
+            f"(amount_source={CAP_SOURCE})."
+        )
+    else:
+        print(
+            f"[settle] SETTLED ${amount:.6f} USDC "
+            f"(amount_source={amount_source}, cap ${args.max_usdc:.6f}), "
+            "recorded to ledger."
+        )
     return 0
 
 
