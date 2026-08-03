@@ -23,16 +23,37 @@ class Settings(BaseSettings):
     # Redis-ready: set REDIS_URL to migrate from in-memory stores.
     redis_url: str | None = None
 
+    # Buyer (hot) — only used for pay_and_fetch spends. Never use cold receive key here.
     evm_private_key: str | None = None
     svm_private_key: str | None = None
 
+    # Seller (cold receive) — on-chain payTo for revenue. Prefer separate from buyer.
     x402_pay_to_address: str | None = None
 
     # Dashboard actions: gated POST endpoints (seller wizard).
     dashboard_actions: bool = False
+
+    # Extra CORS origins, comma-separated EXACT origins (scheme://host[:port]).
+    # Set this to your tunnel origin when demoing; never a wildcard pattern.
+    # A regex like https://.*.trycloudflare.com matches any tunnel anyone can
+    # register for free, which is the same as allowing every origin against an
+    # API that has no auth.
+    cors_extra_origins: str = ""
+
+    # Trust x-forwarded-host/proto when building public resource URLs. Only
+    # enable behind a proxy you control — the value lands in the `resource` URL
+    # baked into the signed 402 challenge and advertised to discovery catalogs.
+    trust_forwarded_host: bool = False
+
+    # How long a built PAYMENT-REQUIRED header is reused before rebuilding.
+    challenge_cache_ttl_seconds: int = 300
     x402_facilitator_url: str = "https://x402.org/facilitator"
     x402_default_network: str = "eip155:84532"
     x402_default_price: str = "$0.01"
+
+    # CDP Secret API keys (faucet + CDP facilitator auth for Bazaar indexing)
+    cdp_api_key_id: str | None = None
+    cdp_api_key_secret: str | None = None
 
     cdp_discovery_url: str = (
         "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources"

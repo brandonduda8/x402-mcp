@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import httpx
@@ -18,12 +19,39 @@ from app.models import (
     VerifyPaymentInput,
 )
 
+log = logging.getLogger(__name__)
+
 
 def _facilitator_client():
+    """HTTP facilitator — CDP JWT auth when using CDP facilitator + keys."""
     from x402.http import FacilitatorConfig, HTTPFacilitatorClient
+    from x402.http.facilitator_client_base import CreateHeadersAuthProvider
+
+    url = settings.x402_facilitator_url.rstrip("/")
+    auth_provider = None
+
+    # CDP Facilitator requires Secret API key JWT auth for verify/settle (Bazaar indexing).
+    if "api.cdp.coinbase.com" in url and settings.cdp_api_key_id and settings.cdp_api_key_secret:
+        try:
+            from cdp.x402.x402 import create_cdp_auth_headers
+
+            create_headers = create_cdp_auth_headers(
+                settings.cdp_api_key_id, settings.cdp_api_key_secret
+            )
+            auth_provider = CreateHeadersAuthProvider(create_headers)
+        except Exception:
+            # Falling through unauthenticated against CDP means every verify and
+            # settle fails at the facilitator with nothing logged locally — the
+            # failure has to be visible here or it looks like a buyer problem.
+            log.warning(
+                "CDP facilitator configured but JWT auth setup failed; "
+                "continuing UNAUTHENTICATED — verify/settle will be rejected",
+                exc_info=True,
+            )
+            auth_provider = None
 
     return HTTPFacilitatorClient(
-        FacilitatorConfig(url=settings.x402_facilitator_url)
+        FacilitatorConfig(url=url, auth_provider=auth_provider)
     )
 
 
@@ -42,6 +70,15 @@ def _resource_server():
     facilitator = _facilitator_client()
     server = x402ResourceServer(facilitator)
     server.register("eip155:*", ExactEvmServerScheme())
+    # Bazaar discovery metadata enrichment (CDP indexes after settle)
+    try:
+        from x402.extensions.bazaar import bazaar_resource_server_extension
+
+        server.register_extension(bazaar_resource_server_extension)
+    except Exception:
+        # Without this extension the challenge carries no discovery metadata,
+        # so the resource can settle correctly and still never be indexed.
+        log.warning("bazaar discovery extension unavailable", exc_info=True)
     server.initialize()
     return server
 
@@ -52,23 +89,49 @@ def _decode_payment_inputs(
 ) -> tuple[Any, Any]:
     import base64
 
-    try:
-        requirements_raw = json.loads(
-            base64.b64decode(payment_required).decode("utf-8")
-        )
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
-        raise ValueError(f"Invalid payment_required payload: {exc}") from exc
+    from x402.http.utils import (
+        decode_payment_required_header,
+        decode_payment_signature_header,
+    )
+    from x402.schemas import PaymentRequirements
+    from x402.schemas.v1 import PaymentRequirementsV1
 
-    requirements_list = requirements_raw.get("accepts", [requirements_raw])
+    # Prefer official header decoders (handles v1/v2 models)
+    try:
+        payment_required_model = decode_payment_required_header(payment_required)
+        requirements_list = payment_required_model.accepts
+    except Exception:
+        try:
+            requirements_raw = json.loads(
+                base64.b64decode(payment_required).decode("utf-8")
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+            raise ValueError(f"Invalid payment_required payload: {exc}") from exc
+
+        requirements_list = requirements_raw.get("accepts", [requirements_raw])
+        if not requirements_list:
+            raise ValueError("No payment requirements found in payment_required payload")
+        # Coerce first accept entry into a schema model
+        first = requirements_list[0]
+        if not hasattr(first, "network"):
+            try:
+                first = PaymentRequirements.model_validate(first)
+            except Exception:
+                first = PaymentRequirementsV1.model_validate(first)
+        requirements_list = [first]
+
     if not requirements_list:
         raise ValueError("No payment requirements found in payment_required payload")
 
     try:
-        payload = json.loads(
-            base64.b64decode(payment_signature).decode("utf-8")
-        )
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-        payload = payment_signature
+        payload = decode_payment_signature_header(payment_signature)
+    except Exception:
+        try:
+            payload = json.loads(
+                base64.b64decode(payment_signature).decode("utf-8")
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            payload = payment_signature
 
     return payload, requirements_list[0]
 
@@ -266,10 +329,16 @@ async def pay_and_fetch(params: PayAndFetchInput) -> dict[str, Any]:
         if settle is not None:
             settlement_dump = settle.model_dump()
 
+        # A PAYMENT-RESPONSE header proves settlement was *attempted*; only
+        # SettleResponse.success proves funds actually moved on-chain. Fail
+        # closed: a missing, unparseable, or failure-reporting settlement is
+        # never counted as settled.
+        settled_ok = settle is not None and getattr(settle, "success", None) is True
+
         return {
             "status_code": response.status_code,
             "body": response.text[:8000],
-            "payment_settled": settlement_dump is not None,
+            "payment_settled": settled_ok,
             "payment_settlement": settlement_dump,
             "settlement_parse_error": settle_error,
             "url": str(params.url),
@@ -284,13 +353,9 @@ def build_seller_requirements(params: BuildSellerRequirementsInput) -> dict[str,
             "pay_to address required. Pass pay_to or set X402_PAY_TO_ADDRESS."
         )
 
-    from x402 import ResourceConfig, x402ResourceServer
-    from x402.mechanisms.evm.exact import ExactEvmServerScheme
+    from x402 import ResourceConfig
 
-    facilitator = _facilitator_client()
-    server = x402ResourceServer(facilitator)
-    server.register("eip155:*", ExactEvmServerScheme())
-    server.initialize()
+    server = _resource_server()
 
     config = ResourceConfig(
         scheme=params.scheme,
@@ -312,6 +377,120 @@ def build_seller_requirements(params: BuildSellerRequirementsInput) -> dict[str,
         "facilitator_url": settings.x402_facilitator_url,
         "sdk": "x402ResourceServer.build_payment_requirements",
     }
+
+
+async def build_payment_required_for_resource(
+    *,
+    resource_url: str,
+    description: str | None = None,
+    price: str | None = None,
+    network: str | None = None,
+    pay_to: str | None = None,
+    scheme: str = "exact",
+    include_bazaar: bool = True,
+) -> dict[str, Any]:
+    """Build PaymentRequired + base64 PAYMENT-REQUIRED header for a protected URL."""
+    from x402 import ResourceConfig
+    from x402.http.utils import encode_payment_required_header
+    from x402.schemas import ResourceInfo
+
+    pay = pay_to or settings.x402_pay_to_address
+    if not pay:
+        raise ValueError("X402_PAY_TO_ADDRESS required for seller demo resource")
+
+    net = network or settings.x402_default_network
+    prc = price or settings.x402_default_price
+    desc = description or "Paid demo resource"
+    # CDP rejects descriptions > 500 chars on verify/settle
+    if len(desc) > 500:
+        desc = desc[:497] + "..."
+
+    extensions: dict[str, Any] | None = None
+    if include_bazaar:
+        try:
+            from x402.extensions.bazaar import declare_discovery_extension
+            from x402.extensions.bazaar.resource_service import OutputConfig
+
+            extensions = declare_discovery_extension(
+                input={},
+                input_schema={"type": "object", "properties": {}},
+                output=OutputConfig(
+                    example={
+                        "ok": True,
+                        "secret": "x402-seller-demo-ok",
+                        "payment_settled": True,
+                    },
+                    schema={
+                        "type": "object",
+                        "properties": {
+                            "ok": {"type": "boolean"},
+                            "secret": {"type": "string"},
+                            "payment_settled": {"type": "boolean"},
+                        },
+                    },
+                ),
+            )
+            # HTTP middleware normally injects method from the route key.
+            # We build PaymentRequired by hand — set method so schema validates.
+            bazaar = extensions.get("bazaar") if isinstance(extensions, dict) else None
+            if isinstance(bazaar, dict):
+                info = bazaar.get("info") or {}
+                inp = info.get("input") or {}
+                if isinstance(inp, dict) and "method" not in inp:
+                    inp = {**inp, "type": inp.get("type") or "http", "method": "GET"}
+                    info = {**info, "input": inp}
+                    extensions = {**extensions, "bazaar": {**bazaar, "info": info}}
+        except Exception:
+            extensions = None
+
+    server = _resource_server()
+    config = ResourceConfig(
+        scheme=scheme,
+        network=net,
+        pay_to=pay,
+        price=prc,
+        description=desc,
+    )
+    requirements = server.build_payment_requirements(config)
+    payment_required = await server.create_payment_required_response(
+        requirements,
+        resource=ResourceInfo(
+            url=resource_url,
+            description=desc,
+            mime_type="application/json",
+            service_name="x402-seller-demo",
+            tags=["demo", "testnet", "x402"],
+        ),
+        error="Payment required",
+        extensions=extensions,
+    )
+    header = encode_payment_required_header(payment_required)
+    body = payment_required.model_dump(by_alias=True, exclude_none=True)
+
+    return {
+        "payment_required": body,
+        "payment_required_header": header,
+        "requirements": [
+            r.model_dump(by_alias=True) if hasattr(r, "model_dump") else dict(r)
+            for r in requirements
+        ],
+        "pay_to": pay,
+        "price": prc,
+        "network": net,
+    }
+
+
+async def verify_and_settle_from_headers(
+    payment_signature: str,
+    payment_required_header: str,
+) -> dict[str, Any]:
+    """Verify + settle a buyer PAYMENT-SIGNATURE against PAYMENT-REQUIRED."""
+    return await _verify_and_settle_payment(
+        VerifyPaymentInput(
+            payment_signature=payment_signature,
+            payment_required=payment_required_header,
+        )
+    )
 
 
 def build_pro_upgrade_requirements(agent_id: str) -> dict[str, Any]:

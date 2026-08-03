@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import time
 from collections import defaultdict
 from typing import Literal
@@ -10,14 +11,17 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 
 from app.commerce import quota_store
 from app.config import settings
+from app.dashboard import DASHBOARD_HTML
 from app.ledger_io import read_ledger_rows
 from app.manifest import build_mcp_manifest
 from app.mcp_server import mcp
 from app.ops_events import event_stream, format_sse
+
+log = logging.getLogger(__name__)
 
 app = FastAPI(
     title="x402 Micropayments MCP",
@@ -25,16 +29,64 @@ app = FastAPI(
     version="0.1.0",
 )
 
+def _cors_origins() -> list[str]:
+    """Local Vite dev origins, plus any EXACT origins the operator opted into.
+
+    Deliberately no origin regex: a pattern like https://.*.trycloudflare.com
+    matches a tunnel anyone can register for free, and every endpoint here is
+    unauthenticated, so that is equivalent to allowing all origins to read the
+    ledger and wallet. Set CORS_EXTRA_ORIGINS to the one tunnel you are using.
+    """
+    origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ]
+    extra = [o.strip().rstrip("/") for o in settings.cors_extra_origins.split(",")]
+    origins.extend(o for o in extra if o)
+    return origins
+
+
 # TODO auth before public exposure — dashboard CORS for local Vite dev only.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_methods=["GET", "POST"],
+    allow_origins=_cors_origins(),
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["PAYMENT-REQUIRED", "PAYMENT-RESPONSE", "PAYMENT-SIGNATURE"],
 )
+
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "0.0.0.0", "[::1]", "::1")
+
+
+def _public_base_from_request(request: Request) -> str:
+    """Public origin for seller resource URLs.
+
+    The result is baked into the `resource` field of the signed 402 challenge
+    and advertised to discovery catalogs, which index it once — so a spoofed
+    Host header would otherwise let a caller choose what this server advertises.
+    Forwarded headers are therefore only honoured when TRUST_FORWARDED_HOST is
+    set, i.e. when the operator knows a proxy they control is in front.
+    """
+    if not settings.trust_forwarded_host:
+        return settings.public_base_url.rstrip("/")
+
+    xf_proto = request.headers.get("x-forwarded-proto")
+    xf_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    if not xf_host:
+        return settings.public_base_url.rstrip("/")
+
+    host = xf_host.split(",")[0].strip()
+    if host.startswith("["):  # bracketed IPv6, optionally with :port
+        bare = host[: host.index("]") + 1] if "]" in host else host
+    else:
+        bare = host.rsplit(":", 1)[0]
+    if bare.lower() in _LOOPBACK_HOSTS or host.lower() in _LOOPBACK_HOSTS:
+        return settings.public_base_url.rstrip("/")
+
+    scheme = (xf_proto or "https").split(",")[0].strip()
+    return f"{scheme}://{host}".rstrip("/")
 
 
 @app.exception_handler(Exception)
@@ -47,6 +99,17 @@ async def generic_handler(_: Request, exc: Exception) -> JSONResponse:
             "upgrade_url": settings.upgrade_url,
         },
     )
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> RedirectResponse:
+    return RedirectResponse(url="/dashboard", status_code=307)
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard() -> HTMLResponse:
+    """Operator terminal: live health, quota meters, tool matrix, revenue paths."""
+    return HTMLResponse(DASHBOARD_HTML)
 
 
 @app.get("/health")
@@ -255,6 +318,211 @@ async def seller_requirements_endpoint(body: dict) -> dict:
         description=body.get("description", "Paid API access"),
     )
     return x402_services.build_seller_requirements(params)
+
+
+# ---------- Step 2 seller demo: paid resource at /demo/paid ----------
+
+@app.get("/demo/paid")
+async def demo_paid_resource(request: Request) -> JSONResponse:
+    """Seller demo — returns 402 without payment; paid body after verify+settle.
+
+    Self-test (vault pays itself on Base Sepolia):
+      pay_and_fetch url=http://127.0.0.1:8402/demo/paid preferred_network=eip155:84532
+    """
+    from x402.http.constants import (
+        PAYMENT_REQUIRED_HEADER,
+        PAYMENT_RESPONSE_HEADER,
+        PAYMENT_SIGNATURE_HEADER,
+        X_PAYMENT_HEADER,
+    )
+    from x402.http.utils import encode_payment_response_header
+
+    from app import challenge_cache, x402_services
+    from app.ledger_io import append_ledger_row
+    from app.ops_events import emit_tool_event
+
+    resource_url = f"{_public_base_from_request(request)}/demo/paid"
+    description = "x402 seller demo — paid JSON secret on Base Sepolia"
+
+    # Every input baked into the header goes into the fingerprint. Miss one and
+    # a changed challenge deploys cleanly while buyers keep seeing the old one.
+    cache_key = challenge_cache.fingerprint(
+        resource_url=resource_url,
+        description=description,
+        price=settings.x402_default_price,
+        network=settings.x402_default_network,
+        pay_to=settings.x402_pay_to_address,
+        scheme="exact",
+        include_bazaar=True,
+    )
+
+    try:
+        built = await challenge_cache.get_or_build(
+            cache_key,
+            lambda: x402_services.build_payment_required_for_resource(
+                resource_url=resource_url,
+                description=description,
+                price=settings.x402_default_price,
+                network=settings.x402_default_network,
+            ),
+            ttl_seconds=settings.challenge_cache_ttl_seconds,
+        )
+    except Exception:
+        # Cold start with the facilitator down. A retryable 503 is honest;
+        # a 500 gets this endpoint recorded as non-compliant by every indexer.
+        log.warning("demo/paid: cannot build challenge", exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            headers={"Retry-After": "30"},
+            content={"error": "challenge_unavailable", "detail": "retry shortly"},
+        )
+
+    payment_sig = (
+        request.headers.get(PAYMENT_SIGNATURE_HEADER)
+        or request.headers.get(X_PAYMENT_HEADER)
+        or request.headers.get("payment-signature")
+    )
+
+    if not payment_sig:
+        # 402 Payment Required — client should pay and retry with PAYMENT-SIGNATURE
+        return JSONResponse(
+            status_code=402,
+            content={
+                **built["payment_required"],
+                "note": "Pay with x402 exact scheme, then retry with PAYMENT-SIGNATURE header.",
+                "seller_pay_to": built["pay_to"],
+                "price": built["price"],
+                "network": built["network"],
+            },
+            headers={
+                PAYMENT_REQUIRED_HEADER: built["payment_required_header"],
+                "Access-Control-Expose-Headers": PAYMENT_REQUIRED_HEADER,
+            },
+        )
+
+    # Buyer presented payment — verify + settle (revenue path)
+    result = await x402_services.verify_and_settle_from_headers(
+        payment_signature=payment_sig,
+        payment_required_header=built["payment_required_header"],
+    )
+
+    if not result.get("is_valid"):
+        return JSONResponse(
+            status_code=402,
+            content={
+                **built["payment_required"],
+                "error": "Payment verification failed",
+                "invalid_reason": result.get("invalid_reason"),
+            },
+            headers={PAYMENT_REQUIRED_HEADER: built["payment_required_header"]},
+        )
+
+    settlement = result.get("settlement") or {}
+    paid_ok = result.get("payment_settled") is True
+
+    if paid_ok:
+        append_ledger_row(
+            "revenue",
+            {
+                "kind": "seller_demo",
+                "resource": resource_url,
+                "pay_to": built["pay_to"],
+                "network": built["network"],
+                "price": built["price"],
+                "tx": settlement.get("transaction"),
+                "payer": settlement.get("payer"),
+                "settlement": settlement,
+            },
+        )
+        emit_tool_event(
+            "demo_paid",
+            "seller",
+            {"tx": settlement.get("transaction"), "price": built["price"]},
+        )
+
+    headers: dict[str, str] = {}
+    if paid_ok and settlement:
+        try:
+            from x402.schemas import SettleResponse
+
+            settle_model = SettleResponse.model_validate(settlement)
+            headers[PAYMENT_RESPONSE_HEADER] = encode_payment_response_header(settle_model)
+            headers["Access-Control-Expose-Headers"] = PAYMENT_RESPONSE_HEADER
+        except Exception:
+            pass
+
+    return JSONResponse(
+        status_code=200 if paid_ok else 402,
+        content={
+            "ok": paid_ok,
+            "message": "Payment settled — seller demo payload unlocked"
+            if paid_ok
+            else "Verified but settlement failed",
+            "secret": "x402-seller-demo-ok" if paid_ok else None,
+            "seller_pay_to": built["pay_to"],
+            "price": built["price"],
+            "network": built["network"],
+            "payment_settled": paid_ok,
+            "settlement": settlement,
+            "settlement_error": result.get("settlement_error"),
+        },
+        headers=headers,
+    )
+
+
+@app.get("/demo/paid/info")
+async def demo_paid_info(request: Request) -> dict:
+    """Free metadata for the seller demo resource (no payment)."""
+    base = _public_base_from_request(request)
+    return {
+        "resource": f"{base}/demo/paid",
+        "price": settings.x402_default_price,
+        "network": settings.x402_default_network,
+        "pay_to": settings.x402_pay_to_address,
+        "public_base_url_config": settings.public_base_url,
+        "flow": [
+            "1. GET /demo/paid → 402 + PAYMENT-REQUIRED",
+            "2. Buyer pays (pay_and_fetch or wallet)",
+            "3. GET /demo/paid with PAYMENT-SIGNATURE → 200 + secret + settle",
+        ],
+        "self_test": {
+            "url": f"{base}/demo/paid",
+            "tool": "pay_and_fetch",
+            "preferred_network": settings.x402_default_network,
+        },
+        "bazaar": {
+            "merchant_discovery": (
+                "https://api.cdp.coinbase.com/platform/v2/x402/discovery/merchant"
+                f"?payTo={settings.x402_pay_to_address or ''}"
+            ),
+            "note": "CDP indexes after settle through CDP facilitator; catalog lag ~10m",
+        },
+    }
+
+
+@app.get("/ops/status")
+async def ops_status() -> dict:
+    """Compact stack status for restart scripts and dashboards."""
+    from app.doctor import run_checks
+
+    report = await run_checks()
+    return {
+        "service": "x402-micropayments-mcp",
+        "public_base_url": settings.public_base_url,
+        "pay_to": settings.x402_pay_to_address,
+        "network": settings.x402_default_network,
+        "facilitator": settings.x402_facilitator_url,
+        "wallet_configured": bool(settings.evm_private_key),
+        "doctor_ok": report.all_passed,
+        "checks": [
+            {
+                "id": c.id,
+                "passed": c.passed,
+                "detail": c.detail,
+            }
+            for c in report.checks
+        ],
+    }
 
 
 # Mount MCP Streamable HTTP / SSE transport when available.

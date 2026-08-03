@@ -3,6 +3,10 @@ __pycache__/
 .pytest_cache/
 *.pyc
 .env
+.env.*
+!.env.example
+.keys/
 .mcp.json
 dashboard/node_modules/
 dashboard/dist/
+dashboard/tsconfig.tsbuildinfo

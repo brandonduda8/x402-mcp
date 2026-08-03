@@ -138,3 +138,6 @@ Revenue is collected via the **commerce overlay** (MCP tool access) and **on-cha
 ```
 
 Evidence saved to goal scratch directory (`pytest.log`, `launch.log`, `tool_smoke.json`).
+## Ops (stack / Bazaar)
+
+See [ops-checklist.md](ops-checklist.md), [wallet-split-and-bazaar.md](wallet-split-and-bazaar.md), [seller-demo.md](seller-demo.md).
