@@ -82,3 +82,82 @@ it.
 building happened in between, some of it on the endpoints this table says to
 stop building. Instruments only help if someone reads them; check this table
 before the next product decision, not after.
+
+---
+
+## 2026-08-03 checkpoint — the 4% was ours
+
+The table above is wrong, and the error was self-inflicted.
+
+`/demand` counted every settled revenue row as a sale. It never consulted
+`is_operator_settle`, even though the classifier already existed inline in the
+`/ledger/{name}` route and `payer` was already threaded into every row. So the
+metric this whole document rests on counted us settling against our own listing
+as customer demand.
+
+Measured 2026-08-03, read-only:
+
+| | Then (as published) | Now (external only) |
+|---|---:|---:|
+| `/mn/property-check` challenges | 25 | **386** (277 qualified) |
+| `/mn/property-check` sales | 2 → then 5 | **0 external**, 3 operator, 2 unknown |
+| `/mn/property-check` conversion | **4.0%** | **0%** |
+
+The three sales dated 2026-08-02 are `is_operator_settle: true` from
+`0x67ffc9…` — the settles run to get the resource catalogued. Two older rows
+have no `payer` at all (they predate payer threading) and are counted as
+*unknown*, never as external. **Confirmed external sales for
+`/mn/property-check`: zero.**
+
+Two independent sources agree. The CDP Bazaar's own quality block reports
+`l30DaysUniquePayers: 1` for it. And `scripts/market_scan.py` (added
+2026-08-03) reads the same telemetry across the whole catalog: 5 calls, 1
+payer.
+
+The one confirmed external sale in this entire project's ledger remains the
+2026-07-30 `base-tx-decision` row — the product this document says to stop
+investing in.
+
+### The reversal clause is close, but not yet fired
+
+"Cataloged and still converts near zero at >200 challenges" now reads: cataloged
+(2026-08-02T13:48:38Z), 386 challenges, 0% external conversion. Two of the three
+conditions are met. The third is time — the listing is roughly one day old, and
+concluding from that would be the same mistake in the opposite direction.
+
+**Decision date: 2026-08-24**, three weeks post-catalog. Written down now so it
+is not renegotiated later:
+
+- **≥1 confirmed external sale** (`is_operator_settle: false`) → the shape works,
+  keep investing.
+- **Zero external sales at >600 challenges** → the reversal clause fires. Stop
+  selling data products on this rail and stop paying keepalive settles.
+
+Until then: no features, no repositioning, no repricing. Price is demonstrably
+not the binding constraint at n=0.
+
+### The delisting cliff is dated and mostly intended
+
+The CDP Bazaar drops resources after ~30 days with no settled payment. From the
+catalog's own `lastUpdated`:
+
+- `/base/tx-decision` and the Pulse composite last settled **2026-07-22** →
+  dropped around **2026-08-21**. This is the intended consequence of the "no
+  further re-index settles" decision above. Let them go.
+- `/mn/property-check` last settled **2026-08-02** → dropped around
+  **2026-09-01**. Whether to pay the $0.01 + gas keepalive is contingent on the
+  2026-08-24 read. If it shows zero external sales, do not pay it either.
+
+Do **not** change `PINNED_PULSE_PRODUCT_ID` (`render.yaml:52-59`) as part of any
+delisting. It is embedded in the purchase URL already in the catalog, and
+changing it 404s every indexed buyer. Delisting is not a reason to touch it.
+
+### Method note, second entry
+
+The first method note said instruments only help if someone reads them. The
+sequel: an instrument that is read but wrong is worse than one that is ignored,
+because it manufactures confidence. `/demand` now splits `sales_external` /
+`sales_operator` / `sales_unknown` and reports `conversion` on external payers
+only, with `conversion_including_operator` retained so this correction stays
+auditable. Before trusting any conversion number from this repo, check which of
+the two you are reading.

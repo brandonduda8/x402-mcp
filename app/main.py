@@ -28,6 +28,7 @@ from app.commerce import quota_store
 from app.config import settings
 from app.dashboard import DASHBOARD_HTML
 from app.doctor import run_checks
+from app import ledger_io
 from app.ledger_io import read_ledger_rows
 from app.logging_config import setup_logging
 from app.manifest import build_mcp_manifest
@@ -229,10 +230,19 @@ async def dashboard() -> HTMLResponse:
 
 @app.get("/health")
 async def health() -> dict:
+    # Report the facilitator actually used for the revenue network, not the
+    # raw default. settings.x402_facilitator_url is x402.org (testnet-only),
+    # while mainnet settles route to CDP — publishing the default next to a
+    # /.well-known/x402 advertising eip155:8453 hands the trust scanners that
+    # read this endpoint a mainnet/testnet contradiction.
+    from app.x402_services import _facilitator_url_for, resolve_revenue_network
+
+    revenue_network = resolve_revenue_network()
     return {
         "status": "ok",
         "service": "x402-micropayments-mcp",
-        "x402_facilitator": settings.x402_facilitator_url,
+        "x402_facilitator": _facilitator_url_for(revenue_network),
+        "x402_facilitator_network": revenue_network,
         "wallet_configured": bool(settings.evm_private_key),
         "stripe_configured": bool(settings.stripe_secret_key),
         "pay_to_configured": bool(settings.x402_pay_to_address),
@@ -364,13 +374,10 @@ async def ledger_rows(name: Literal["spend", "revenue"]) -> list[dict]:
     rows = read_ledger_rows(name)
     if name != "revenue":
         return rows
-    operator_wallets = {
-        w.strip().lower() for w in settings.operator_wallets.split(",") if w.strip()
-    }
+    operator_wallets = ledger_io.operator_wallet_set()
     for row in rows:
-        payer = row.get("payer")
-        row["is_operator_settle"] = (
-            (payer.lower() in operator_wallets) if (payer and operator_wallets) else None
+        row["is_operator_settle"] = ledger_io.classify_operator_settle(
+            row, operator_wallets
         )
     return rows
 

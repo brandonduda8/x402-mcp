@@ -25,7 +25,7 @@ CI (`.github/workflows/ci.yml`) runs pytest on Python 3.12 + vitest on a clean e
 
 ### Local test failures that are NOT regressions
 
-A configured `.env` (real `EVM_PRIVATE_KEY`) and populated `ledger/*.jsonl` make ~4 tests fail locally that pass in CI: the "missing wallet" tests (`test_mcp_tools`, `test_x402_services`) and `test_ops.py::test_ledger_spend_empty`. `test_docker_evidence.py` / `test_drive_evidence.py` compare previously captured evidence artifacts and go stale whenever tools are added (recapture via `scripts/capture_goal_evidence.py`). Verify a suspected pre-existing failure with `git stash` before assuming your change caused it.
+A configured `.env` (real `EVM_PRIVATE_KEY`) makes the "missing wallet" tests (`test_mcp_tools`, `test_x402_services`) fail locally while passing in CI — they assert the unconfigured behaviour. (`test_ops.py::test_ledger_spend_empty` used to belong on this list; it now points at an isolated `tmp_path` ledger instead of the repo's real one, so a populated `ledger/` no longer breaks it. Prefer that fix over documenting a failure.) `test_docker_evidence.py` / `test_drive_evidence.py` compare previously captured evidence artifacts and go stale whenever tools are added (recapture via `scripts/capture_goal_evidence.py`). Verify a suspected pre-existing failure with `git stash` before assuming your change caused it.
 
 ## Architecture
 

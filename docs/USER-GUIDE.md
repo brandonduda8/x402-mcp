@@ -196,7 +196,7 @@ The Python suite is hermetic — it spins up a local mock facilitator, so no int
 .\.venv\Scripts\python.exe -m pytest -v
 ```
 
-One gotcha worth knowing before you panic: on a machine with a *fully configured* `.env` and populated `ledger/*.jsonl`, roughly four tests fail locally that pass in CI — the "missing wallet" tests in `test_mcp_tools.py` / `test_x402_services.py` and `test_ops.py::test_ledger_spend_empty`. They assert the unconfigured behaviour. `make test` also runs the dashboard's vitest suite via pnpm; skip it if you never installed the dashboard.
+One gotcha worth knowing before you panic: on a machine with a *fully configured* `.env`, the "missing wallet" tests in `test_mcp_tools.py` / `test_x402_services.py` fail locally while passing in CI — they assert the unconfigured behaviour. A populated `ledger/` no longer breaks anything: `test_ops.py::test_ledger_spend_empty` reads an isolated `tmp_path` ledger rather than the repo's real one. `make test` also runs the dashboard's vitest suite via pnpm; skip it if you never installed the dashboard.
 
 ### Where to go next
 

@@ -42,3 +42,37 @@ def read_ledger_rows(name: str, *, limit: int | None = 1000) -> list[dict]:
 
     rows.reverse()
     return rows if limit is None else rows[:limit]
+
+
+def operator_wallet_set() -> set[str]:
+    """Lowercased operator wallets from config, empty when unconfigured."""
+    from app.config import settings
+
+    return {w.strip().lower() for w in settings.operator_wallets.split(",") if w.strip()}
+
+
+def classify_operator_settle(
+    row: dict, operator_wallets: set[str] | None = None
+) -> bool | None:
+    """Is this revenue row the operator paying themselves?
+
+    True when the row's `payer` matches a configured operator wallet
+    (cataloging/re-indexing, not a customer), False when it's a different
+    wallet (a real external sale), and None when `payer` is missing or no
+    operator wallets are configured — rows written before the field existed,
+    or a settlement whose facilitator didn't report one.
+
+    Treat None as "unknown", never as "external": most of this project's
+    revenue history is self-settled, and the honest default is not to
+    overclaim a sale. Counting operator settles as sales is what reported
+    mn-property-check at 4% conversion when its confirmed external sales
+    were zero.
+    """
+    wallets = operator_wallet_set() if operator_wallets is None else operator_wallets
+    payer = row.get("payer")
+    if not payer or not wallets:
+        return None
+    try:
+        return str(payer).lower() in wallets
+    except Exception:  # a malformed payer is unknown, never external
+        return None

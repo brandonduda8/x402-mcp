@@ -385,14 +385,131 @@ def _build_x402_client(
     return client
 
 
+# USDC (the only asset this repo prices in) has 6 decimals, which both
+# ledger_writer._atomic and publisher.parse_price_usdc hardcode. The real
+# figure is still looked up per asset below so a non-USDC settlement can never
+# be recorded off by orders of magnitude.
+DEFAULT_ASSET_DECIMALS = 6
+
+
+def asset_decimals(network: str | None, asset: str | None) -> int:
+    """Decimals for `asset` on `network`; USDC's 6 when it can't be resolved."""
+    if not network or not asset:
+        return DEFAULT_ASSET_DECIMALS
+    network = str(network)
+    try:
+        if network.startswith("eip155:"):
+            from x402.mechanisms.evm.utils import get_asset_info
+        elif network.startswith("solana:"):
+            from x402.mechanisms.svm.utils import get_asset_info
+        else:
+            return DEFAULT_ASSET_DECIMALS
+        return int(get_asset_info(network, str(asset))["decimals"])
+    except Exception:  # noqa: BLE001 — unregistered asset/import: fall back, never raise
+        return DEFAULT_ASSET_DECIMALS
+
+
+def atomic_to_units(
+    amount_atomic: Any,
+    network: str | None = None,
+    asset: str | None = None,
+) -> float | None:
+    """Convert an on-wire atomic amount to a decimal figure, or None if unusable.
+
+    Amounts cross the x402 wire as decimal *strings* of atomic units
+    (`PaymentRequirements.amount`, `SettleResponse.amount`). Anything that
+    isn't a non-negative integer is treated as absent rather than guessed at —
+    a wrong number in a money ledger is worse than a missing one.
+    """
+    if amount_atomic is None or isinstance(amount_atomic, bool):
+        return None
+    try:
+        atomic = int(str(amount_atomic).strip())
+    except (TypeError, ValueError):
+        return None
+    if atomic < 0:
+        return None
+    return atomic / (10 ** asset_decimals(network, asset))
+
+
+def signed_requirements_capture() -> tuple[dict[str, Any], Any]:
+    """`(store, hook)` for x402Client.on_after_payment_creation.
+
+    The amount a buyer is actually charged is only knowable from the payment
+    requirements its client selects out of the 402 — `max_price_usdc` is a
+    ceiling, not a price. Verified against the installed x402 2.14.0:
+    `x402Client.on_after_payment_creation` (x402/client.py:125) fires with a
+    `PaymentCreatedContext` carrying `selected_requirements`
+    (x402/client_base.py:501-513).
+
+    The hook never raises: it runs inside payload creation, and a failed
+    bookkeeping read must not cost a payment.
+    """
+    store: dict[str, Any] = {}
+
+    def capture(ctx: Any) -> None:
+        try:
+            req = getattr(ctx, "selected_requirements", None)
+            if req is None:
+                return
+            get_amount = getattr(req, "get_amount", None)
+            store["amount_atomic"] = (
+                get_amount() if callable(get_amount) else getattr(req, "amount", None)
+            )
+            store["asset"] = getattr(req, "asset", None)
+            store["network"] = getattr(req, "network", None)
+        except Exception:  # noqa: BLE001 — bookkeeping must never break a payment
+            logger.warning("pay_and_fetch: could not capture the signed amount")
+
+    return store, capture
+
+
+def charged_amount(
+    settlement: dict[str, Any] | None,
+    signed: dict[str, Any] | None,
+) -> tuple[float | None, str | None]:
+    """`(amount_usdc, source)` actually charged, or `(None, None)` if unknown.
+
+    The facilitator's own settled amount wins — it is the only figure that
+    reflects a partial or overridden settlement. The signed requirement is the
+    fallback: what the buyer authorized. Nothing is inferred beyond that; a
+    caller that has only a spend *cap* left must label it as such rather than
+    pass it off as the charge.
+    """
+    settlement = settlement or {}
+    signed = signed or {}
+    network = settlement.get("network") or signed.get("network")
+    asset = signed.get("asset")
+
+    amount = atomic_to_units(settlement.get("amount"), network, asset)
+    if amount is not None:
+        return amount, "settlement"
+
+    amount = atomic_to_units(signed.get("amount_atomic"), network, asset)
+    if amount is not None:
+        return amount, "authorized"
+
+    return None, None
+
+
 async def pay_and_fetch(params: PayAndFetchInput) -> dict[str, Any]:
-    """Execute x402 paid HTTP request via x402HttpxClient SDK."""
+    """Execute x402 paid HTTP request via x402HttpxClient SDK.
+
+    On a settled payment the result also carries `amount_charged_usdc` — what
+    was *actually* charged, not `max_price_usdc`, which is only a ceiling. A
+    caller that ledgers the cap overstates its own spend for every resource
+    that asks for less than the cap, and warden computes its daily/monthly
+    caps off that ledger.
+    """
     from x402 import NoMatchingRequirementsError
     from x402.http import x402HTTPClient
     from x402.http.clients import x402HttpxClient
 
     client = _build_x402_client(params.preferred_network, params.max_price_usdc)
     http_client = x402HTTPClient(client)
+
+    signed, capture_signed = signed_requirements_capture()
+    client.on_after_payment_creation(capture_signed)
 
     # Client-level timeout applies to the paid retry too (mainnet settle is slow).
     async with x402HttpxClient(client, timeout=settings.x402_http_timeout) as http:
@@ -436,12 +553,23 @@ async def pay_and_fetch(params: PayAndFetchInput) -> dict[str, Any]:
         # SettleResponse.success proves funds actually moved on-chain.
         settled_ok = settle is not None and getattr(settle, "success", None) is True
 
+        # Only ever report a charge for a payment that actually settled, so no
+        # consumer can read an amount off a payment that moved no funds.
+        charged, charged_source = (
+            charged_amount(settlement_dump, signed) if settled_ok else (None, None)
+        )
+
         return {
             "status_code": response.status_code,
             "body": response.text[:8000],
             "payment_settled": settled_ok,
             "payment_settlement": settlement_dump,
             "settlement_parse_error": settle_error,
+            # None when nothing settled, or when neither the facilitator nor
+            # the signed requirements yielded a usable amount. Callers must
+            # not substitute their price cap without saying so.
+            "amount_charged_usdc": charged,
+            "amount_charged_source": charged_source,
             "url": str(params.url),
             "sdk": "x402HttpxClient",
         }
