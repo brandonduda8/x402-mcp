@@ -136,6 +136,29 @@ is not renegotiated later:
 Until then: no features, no repositioning, no repricing. Price is demonstrably
 not the binding constraint at n=0.
 
+### 2026-08-04 — freeze lifted (operator unfreeze)
+
+The 2026-08-24 calendar gate is **lifted early by operator decision**. Work on
+`/mn/property-check` and other cost-basis / access-barrier products is allowed
+again: features, repositioning, and (careful) repricing may proceed under the
+usual invariants (402-before-422, fingerprint, settle-then-revenue, prices only
+in `app/config.py`).
+
+What is **not** reversed:
+
+- **Pulse composite and `/base/tx-decision` stay demoted.** No new features,
+  re-index settles, or lead outreach. Let Bazaar delist when idle (~2026-08-21).
+- **External-only conversion remains the score.** Operator settles are not
+  demand. Read `sales_external` / `conversion`, not challenge volume alone.
+- **The reverse clause is still available as a kill switch**, not a freeze:
+  if `/mn/property-check` stays at 0 external sales at high challenge volume,
+  stop selling pure data products on this rail and skip keepalive settles. That
+  is a product decision you make from `/demand`, not a calendar lock.
+
+Next focus while unfrozen: invest in `/mn/property-check` and/or design the
+next product with a real cost basis or access barrier. Do not re-open free-RPC
+synthesis as a growth path.
+
 ### The delisting cliff is dated and mostly intended
 
 The CDP Bazaar drops resources after ~30 days with no settled payment. From the
@@ -145,8 +168,9 @@ catalog's own `lastUpdated`:
   dropped around **2026-08-21**. This is the intended consequence of the "no
   further re-index settles" decision above. Let them go.
 - `/mn/property-check` last settled **2026-08-02** → dropped around
-  **2026-09-01**. Whether to pay the $0.01 + gas keepalive is contingent on the
-  2026-08-24 read. If it shows zero external sales, do not pay it either.
+  **2026-09-01**. Keepalive ($0.01 + gas) is an operator call: pay only if you
+  still intend to sell the product and have checked `GET /wallet`. If reverse
+  clause fires (0 external at high volume), do not pay it either.
 
 Do **not** change `PINNED_PULSE_PRODUCT_ID` (`render.yaml:52-59`) as part of any
 delisting. It is embedded in the purchase URL already in the catalog, and

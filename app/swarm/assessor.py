@@ -76,15 +76,50 @@ def gather_signals() -> dict[str, Any]:
 # ---- Profit routes (attributes are the inspectable inputs, 0..1) -------------
 # Each route carries the attribute estimates AND real prerequisites; the score
 # is COMPUTED from WEIGHTS, and blocked-by-prereqs routes are demoted.
+#
+# Ranking is anchored to docs/PRODUCT-FOCUS.md (live decision, not history):
+# - 2026-08-04 operator unfreeze: invest in /mn/property-check again (mn_invest).
+# - Pulse / tx-decision stay demoted (synthesis_publisher) — free-RPC arithmetic
+#   with ~0% external conversion on thousands of challenges.
+# - Sellers that earn resell a real cost basis or access barrier
+#   (cost_basis_resale). Pure data lookup over free RPCs is the long tail.
 _ROUTES: list[dict[str, Any]] = [
     {
-        "id": "synthesis_publisher",
-        "name": "Synthesis publisher (Base Network Pulse)",
-        "attrs": {"speed_to_revenue": 0.9, "capital_efficiency": 0.95,
-                  "tool_leverage": 0.9, "defensibility": 0.5, "impact": 0.6},
+        "id": "mn_invest",
+        "name": "Invest in /mn/property-check (access-barrier product)",
+        "attrs": {"speed_to_revenue": 0.9, "capital_efficiency": 0.85,
+                  "tool_leverage": 0.9, "defensibility": 0.55, "impact": 0.85},
+        "prereqs": ["seller_ready"],
+        "status_note": (
+            "PRODUCT-FOCUS unfrozen 2026-08-04: features / repositioning / careful "
+            "repricing allowed under invariants. Only access-barrier product on "
+            "the rail. External sales still 0 — improve offer quality, not "
+            "challenge volume. Reverse clause remains a kill switch from /demand."
+        ),
+        "next_action": (
+            "Ship value on /mn/property-check (buyer-facing accuracy, coverage, "
+            "or clear packaging). Read GET /demand external sales weekly. If "
+            "still 0 external at high volume, consider reverse clause — stop "
+            "data products rather than polish free-RPC alternatives."
+        ),
+    },
+    {
+        "id": "cost_basis_resale",
+        "name": "Cost-basis / access-barrier products (mn shape)",
+        "attrs": {"speed_to_revenue": 0.7, "capital_efficiency": 0.65,
+                  "tool_leverage": 0.85, "defensibility": 0.8, "impact": 0.9},
         "prereqs": ["seller_ready", "settlement_mainnet"],
-        "status_note": "Built & live: real data, priced, 402-payable. Needs external buyers.",
-        "next_action": "Publish seller storefront publicly; list where x402 buyers look.",
+        "status_note": (
+            "Market + PRODUCT-FOCUS agree: revenue concentrates where the seller "
+            "resells a real cost basis or access barrier (joined ArcGIS, paid "
+            "compute, fulfillment). Free-RPC synthesis does not convert. Unfrozen "
+            "— next product of this shape may be designed and shipped."
+        ),
+        "next_action": (
+            "Design one product that joins non-trivial restricted/multi-source "
+            "data or resells a real cost basis. Prices only in app/config.py; "
+            "unpaid → 402; fingerprint every challenge input; revenue after settle."
+        ),
     },
     {
         "id": "hosted_saas",
@@ -92,8 +127,20 @@ _ROUTES: list[dict[str, Any]] = [
         "attrs": {"speed_to_revenue": 0.4, "capital_efficiency": 0.5,
                   "tool_leverage": 0.8, "defensibility": 0.8, "impact": 0.9},
         "prereqs": ["security_keyprovider", "multichain"],
-        "status_note": "Highest ceiling; gated on security + multi-chain prerequisites.",
-        "next_action": "Land Security KeyProvider + Multi-chain PRs first.",
+        "status_note": (
+            "Highest long-term ceiling; security + multi-chain prereqs are now "
+            "met in-repo. Secondary to mn_invest and the next cost-basis product."
+        ),
+        "next_action": "Polish KeyProvider hardware path + usage analytics when product work is idle.",
+    },
+    {
+        "id": "tech_productionization",
+        "name": "Technical productionization + organic GitHub growth",
+        "attrs": {"speed_to_revenue": 0.35, "capital_efficiency": 0.9,
+                  "tool_leverage": 0.85, "defensibility": 0.5, "impact": 0.5},
+        "prereqs": [],
+        "status_note": "Credibility prerequisite; does not create demand by itself.",
+        "next_action": "Keep CI/doctor green; fix isolation bugs alongside product work.",
     },
     {
         "id": "content_flywheel",
@@ -103,16 +150,10 @@ _ROUTES: list[dict[str, Any]] = [
         "prereqs": [],
         "human_gated": True,
         "status_note": "Recommendations only — content/campaigns are human-executed.",
-        "next_action": "Draft 3 demo concepts for human review (no auto-publish).",
-    },
-    {
-        "id": "tech_productionization",
-        "name": "Technical productionization + organic GitHub growth",
-        "attrs": {"speed_to_revenue": 0.35, "capital_efficiency": 0.9,
-                  "tool_leverage": 0.85, "defensibility": 0.5, "impact": 0.5},
-        "prereqs": [],
-        "status_note": "Close the 12-charter technical backlog; credibility prerequisite.",
-        "next_action": "Execute Security, Multi-chain, CI backlog items.",
+        "next_action": (
+            "If drafting outreach: lead with /mn/property-check only. Never lead "
+            "with Pulse or /base/tx-decision (PRODUCT-FOCUS)."
+        ),
     },
     {
         "id": "merchant_revshare",
@@ -123,6 +164,23 @@ _ROUTES: list[dict[str, Any]] = [
         "human_gated": True,
         "status_note": "Partnership model — human-gated commercial terms.",
         "next_action": "Map top Bazaar merchants for human-led outreach.",
+    },
+    {
+        "id": "synthesis_publisher",
+        "name": "Synthesis publisher (Base Network Pulse + tx-decision)",
+        "attrs": {"speed_to_revenue": 0.2, "capital_efficiency": 0.9,
+                  "tool_leverage": 0.5, "defensibility": 0.15, "impact": 0.15},
+        "prereqs": ["seller_ready", "settlement_mainnet"],
+        "status_note": (
+            "DEMOTED per PRODUCT-FOCUS + live /demand: thousands of challenges, "
+            "~0% external conversion. Free-RPC arithmetic a buyer can inline. "
+            "Stay deployed; no features, no re-index settles, no lead outreach. "
+            "Delisting cliff ~2026-08-21 is intentional."
+        ),
+        "next_action": (
+            "Do nothing on this product. Do not change PINNED_PULSE_PRODUCT_ID. "
+            "Do not pay keepalive settles to keep Pulse/tx-decision listed."
+        ),
     },
 ]
 
@@ -188,7 +246,10 @@ def build_backlog(signals: dict[str, Any]) -> list[dict[str, Any]]:
         ("advertising", "Advertising, distribution & acquisition",
          "human_gated", True, "Ad spend GATED. Recommends budgets/experiments only."),
         ("sales_monetization", "Sales, monetization & product owner",
-         "partial", True, "Pulse is a priced product; pricing/financial claims human-gated."),
+         "partial", True,
+         "PRODUCT-FOCUS unfrozen 2026-08-04: invest in /mn/property-check + "
+         "cost-basis products. Pulse/tx-decision stay demoted — no features or "
+         "re-index. Score external conversion only. Pricing claims human-gated."),
         ("ops_monitoring", "Ops, monitoring, protection & analytics",
          "available", False,
          "Policy caps exist; add runtime spend-anomaly alerts + CDP/Bazaar health checks."),

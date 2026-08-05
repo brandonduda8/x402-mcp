@@ -51,3 +51,25 @@ def test_feedback_loop_marks_completed_charters():
     # Their completion unblocks the Hosted SaaS route (no unmet prereqs).
     saas = next(r for r in a["profit_routes"] if r["id"] == "hosted_saas")
     assert saas["blocked_by"] == []
+
+
+def test_product_focus_realignment():
+    """PRODUCT-FOCUS.md: invest in mn, cost-basis shape; demote Pulse synthesis.
+
+    Unfrozen 2026-08-04. Guard against the assessor re-recommending free-RPC
+    synthesis as the top profit route after measured ~0% external conversion.
+    """
+    a = assessor.assess()
+    by_id = {r["id"]: r for r in a["profit_routes"]}
+    assert {"mn_invest", "cost_basis_resale", "synthesis_publisher"} <= by_id.keys()
+    assert "mn_hold" not in by_id
+
+    # Invest + cost-basis shape outrank demoted free-RPC synthesis.
+    assert by_id["mn_invest"]["priority_score"] > by_id["synthesis_publisher"]["priority_score"]
+    assert by_id["cost_basis_resale"]["priority_score"] > by_id["synthesis_publisher"]["priority_score"]
+
+    # Never recommend Pulse/tx-decision synthesis as the top route.
+    assert a["recommended_route"]["id"] != "synthesis_publisher"
+    # With seller_ready true (pay-to configured in tests/CI), mn invest is top.
+    if a["signals"]["seller_ready"]:
+        assert a["recommended_route"]["id"] == "mn_invest"
