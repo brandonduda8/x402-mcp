@@ -128,6 +128,8 @@ def test_every_builder_input_is_covered_by_the_fingerprint() -> None:
         description="d",
         input_example={"address": "a"},
         output_example={"licensed": True},
+        service_name="MN Rental Compliance",
+        service_tags=["minneapolis", "rental"],
     )
     baseline = challenge_cache.fingerprint(**base)
     for field, changed in (
@@ -138,6 +140,8 @@ def test_every_builder_input_is_covered_by_the_fingerprint() -> None:
         ("description", "different"),
         ("input_example", {"address": "b"}),
         ("output_example", {"licensed": False}),
+        ("service_name", "Other Service"),
+        ("service_tags", ["base", "intelligence"]),
     ):
         assert challenge_cache.fingerprint(**{**base, field: changed}) != baseline, (
             f"changing {field} did not bust the challenge cache"

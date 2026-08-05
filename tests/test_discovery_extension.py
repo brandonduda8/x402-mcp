@@ -148,6 +148,31 @@ def test_discoverable_false_omits_extension_keeps_resource(offline_facilitator):
     assert result["discoverable"] is False
     pr = _decode(result["payment_required_header"])
     assert pr.extensions is None
+
+
+def test_per_resource_service_name_and_tags_override_defaults(offline_facilitator):
+    """A product must be able to leave the storefront's Base tags behind.
+
+    Global BAZAAR_SERVICE_TAGS is correct for fee-intelligence endpoints and
+    wrong for Minneapolis rental compliance. Overrides ride on ResourceInfo
+    and must respect facilitator limits (<=5 tags, each <=32 chars).
+    """
+    result = _build(
+        resource_url=PURCHASE_URL,
+        service_name="MN Rental Compliance",
+        service_tags=["minneapolis", "rental", "compliance", "housing", "property", "extra"],
+    )
+    pr = _decode(result["payment_required_header"])
+    assert pr.resource is not None
+    assert pr.resource.service_name == "MN Rental Compliance"
+    assert pr.resource.tags == [
+        "minneapolis",
+        "rental",
+        "compliance",
+        "housing",
+        "property",
+    ]  # 6th tag dropped
+    assert pr.resource.service_name != settings.bazaar_service_name.strip()[:32]
     assert pr.resource is not None  # resource info still describes the endpoint
 
 

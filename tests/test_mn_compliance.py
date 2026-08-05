@@ -105,6 +105,9 @@ def test_402_header_carries_bazaar_discovery(
     assert parsed.resource.url == f"{settings.public_base_url}/mn/property-check"
     assert parsed.resource.mime_type == "application/json"
     assert parsed.resource.description == mn_compliance.RESOURCE_DESCRIPTION
+    # Per-resource packaging: not the storefront defaults (base,intelligence).
+    assert parsed.resource.service_name == mn_compliance.SERVICE_NAME
+    assert list(parsed.resource.tags or []) == list(mn_compliance.SERVICE_TAGS)
 
     assert parsed.extensions and "bazaar" in parsed.extensions
     bazaar = parsed.extensions["bazaar"]
@@ -112,6 +115,7 @@ def test_402_header_carries_bazaar_discovery(
     assert bazaar["info"]["input"]["queryParams"] == {"address": "1700 Penn Ave N"}
     example = bazaar["info"]["output"]["example"]
     assert example["licensed"] is True
+    assert example["compliance_verdict"] == "licensed_with_violations"
     assert example["rental_licenses"][0]["license_number"] == "LIC394217"
 
     # The facilitator validates info against the extension's own schema
@@ -272,6 +276,7 @@ async def test_check_property_composes_report(mock_arcgis: str) -> None:
     report = await mn_compliance.check_property("1700 Penn Ave N")
 
     assert report["licensed"] is True
+    assert report["compliance_verdict"] == "licensed_with_violations"
     license_record = report["rental_licenses"][0]
     assert license_record["license_number"] == "LIC394217"
     assert license_record["tier"] == "Tier 1"
@@ -288,6 +293,7 @@ async def test_check_property_composes_report(mock_arcgis: str) -> None:
 async def test_check_property_unknown_address(mock_arcgis: str) -> None:
     report = await mn_compliance.check_property("9999 Nowhere St")
     assert report["licensed"] is False
+    assert report["compliance_verdict"] == "unlicensed"
     assert report["rental_licenses"] == []
     assert report["violation_cases"]["total"] == 0
 

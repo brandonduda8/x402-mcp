@@ -67,7 +67,9 @@ def paid_resources() -> list[dict[str, Any]]:
             "price": settings.mn_property_check_price,
             "network": settings.x402_default_network,
             "name": "Minneapolis rental compliance",
-            "what": "Rental license status, violation history, condemned/boarded "
+            "what": "One-call compliance_verdict (licensed_clean | "
+            "licensed_with_violations | unlicensed | condemned_or_boarded) plus "
+            "rental license status, violation history, and condemned/boarded "
             "flag for a Minneapolis street address, from city open data.",
             "params": {"address": "street address string, 1-120 chars (required)"},
         },

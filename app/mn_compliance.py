@@ -76,6 +76,13 @@ RESOURCE_DESCRIPTION = (
     "address string. Output: JSON, live City of Minneapolis open data."
 )
 
+# Per-resource Bazaar metadata (facilitator: name <=32, <=5 tags x <=32 chars).
+# Must NOT inherit the storefront defaults (base,intelligence) — those describe
+# Base L2 fee products, not Minneapolis rental compliance, and agents filter
+# catalogs by these tags. Fingerprinted into the challenge cache.
+SERVICE_NAME = "MN Rental Compliance"
+SERVICE_TAGS = ["minneapolis", "rental", "compliance", "housing", "property"]
+
 
 def _escape(value: str) -> str:
     """Escape a value for an ArcGIS SQL where clause (single-quote doubling)."""
@@ -159,8 +166,24 @@ async def check_property(address: str) -> dict[str, Any]:
         violations, key=lambda v: v.get("Start_Date") or 0, reverse=True
     )[:10]
 
+    licensed = bool(licenses)
+    condemned_flagged = bool(condemned)
+    violation_total = len(violations)
+    # One-token decision for agent buyers. Severity order: condemned >
+    # unlicensed > licensed-with-open-history > clean. Derived only from the
+    # three ArcGIS joins above — no scoring model.
+    if condemned_flagged:
+        compliance_verdict = "condemned_or_boarded"
+    elif not licensed:
+        compliance_verdict = "unlicensed"
+    elif violation_total > 0:
+        compliance_verdict = "licensed_with_violations"
+    else:
+        compliance_verdict = "licensed_clean"
+
     report = {
         "address_queried": address.strip(),
+        "compliance_verdict": compliance_verdict,
         "rental_licenses": [
             {
                 "address": l.get("address"),
@@ -180,9 +203,9 @@ async def check_property(address: str) -> dict[str, Any]:
             }
             for l in licenses
         ],
-        "licensed": bool(licenses),
+        "licensed": licensed,
         "violation_cases": {
-            "total": len(violations),
+            "total": violation_total,
             "recent": [
                 {
                     "case_number": v.get("Violation_Case_Number"),
@@ -197,7 +220,7 @@ async def check_property(address: str) -> dict[str, Any]:
             ],
         },
         "condemned_or_boarded": {
-            "flagged": bool(condemned),
+            "flagged": condemned_flagged,
             "records": [
                 {
                     "address": c.get("Address"),
@@ -240,6 +263,7 @@ DISCOVERY_INPUT_EXAMPLE: dict[str, Any] = {"address": "1700 Penn Ave N"}
 
 DISCOVERY_OUTPUT_EXAMPLE: dict[str, Any] = {
     "address_queried": "1700 Penn Ave N",
+    "compliance_verdict": "licensed_with_violations",
     "licensed": True,
     "rental_licenses": [
         {
@@ -286,6 +310,9 @@ def build_payment_required_header() -> str:
 
     network = settings.x402_default_network
     price = settings.mn_property_check_price
+    # Fingerprint MUST include every input baked into the cached header —
+    # including per-resource Bazaar service_name/tags. Omitting them freezes
+    # a wrong catalog category into Redis (and into Bazaar on the next settle).
     fp = challenge_cache.fingerprint(
         network=network,
         price=price,
@@ -294,6 +321,8 @@ def build_payment_required_header() -> str:
         description=RESOURCE_DESCRIPTION,
         input_example=DISCOVERY_INPUT_EXAMPLE,
         output_example=DISCOVERY_OUTPUT_EXAMPLE,
+        service_name=SERVICE_NAME,
+        service_tags=SERVICE_TAGS,
     )
 
     def _build() -> str:
@@ -307,6 +336,8 @@ def build_payment_required_header() -> str:
                 discovery_method="GET",
                 discovery_input_example=DISCOVERY_INPUT_EXAMPLE,
                 discovery_output_example=DISCOVERY_OUTPUT_EXAMPLE,
+                service_name=SERVICE_NAME,
+                service_tags=SERVICE_TAGS,
             )
         )["payment_required_header"]
 

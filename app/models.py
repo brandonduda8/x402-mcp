@@ -131,6 +131,18 @@ class BuildSellerRequirementsInput(BaseModel):
         default=None,
         description="Small example of the JSON response a paying buyer receives",
     )
+    # Per-resource Bazaar metadata. Global defaults (BAZAAR_SERVICE_NAME /
+    # BAZAAR_SERVICE_TAGS) are wrong for a product that is not "Base intelligence"
+    # — e.g. Minneapolis rental compliance. Facilitator limits: name <= 32
+    # printable ASCII; <= 5 tags, each <= 32 chars. None = use settings.
+    service_name: str | None = Field(
+        default=None,
+        description="Bazaar ResourceInfo.service_name override (max 32 chars)",
+    )
+    service_tags: list[str] | None = Field(
+        default=None,
+        description="Bazaar ResourceInfo.tags override (max 5 tags, 32 chars each)",
+    )
 
 
 class VerifyPaymentInput(BaseModel):

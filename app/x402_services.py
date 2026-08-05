@@ -605,22 +605,39 @@ def _build_discovery_extension(
     return extension
 
 
+def _normalize_service_tags(raw: list[str] | str | None) -> list[str]:
+    """Clamp to facilitator limits: <=5 tags, each <=32 printable chars."""
+    if raw is None:
+        parts = settings.bazaar_service_tags.split(",")
+    elif isinstance(raw, str):
+        parts = raw.split(",")
+    else:
+        parts = list(raw)
+    return [t.strip()[:32] for t in parts if t and t.strip()][:5]
+
+
 def _build_resource_info(params: BuildSellerRequirementsInput, description: str) -> Any:
     """ResourceInfo (url/description/mime + Bazaar service metadata) for a 402.
 
     ``description`` is the already-clamped value (see _clamp_description) so the
     ResourceInfo cannot exceed the CDP description limit either.
+
+    Per-resource ``service_name`` / ``service_tags`` on the input win over the
+    global BAZAAR_* settings so a product is not forced into the wrong category
+    (e.g. Minneapolis rental compliance tagged as Base intelligence).
     """
     from x402.schemas import ResourceInfo
 
-    tags = [
-        t.strip()[:32] for t in settings.bazaar_service_tags.split(",") if t.strip()
-    ][:5]
+    tags = _normalize_service_tags(params.service_tags)
+    if params.service_name is not None:
+        service_name = params.service_name.strip()[:32] or None
+    else:
+        service_name = settings.bazaar_service_name.strip()[:32] or None
     return ResourceInfo(
         url=str(params.resource_url),
         description=description,
         mime_type=params.mime_type,
-        service_name=settings.bazaar_service_name.strip()[:32] or None,
+        service_name=service_name,
         tags=tags or None,
     )
 
