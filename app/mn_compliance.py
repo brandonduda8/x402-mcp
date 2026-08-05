@@ -256,10 +256,15 @@ def resource_url() -> str:
     return f"{settings.public_base_url}/mn/property-check"
 
 
+# Free sample address: same shape as a paid response, fixed so the free path
+# cannot substitute for the paid product (any other address still requires
+# payment). Used by GET /mn/property-check/sample and discovery docs.
+SAMPLE_ADDRESS = "1700 Penn Ave N"
+
 # Bazaar discovery examples: buyers call GET {resource_url}?address=... and
 # receive a report shaped like check_property()'s output. Small but faithful
 # excerpts — the CDP facilitator catalogs these verbatim at settle time.
-DISCOVERY_INPUT_EXAMPLE: dict[str, Any] = {"address": "1700 Penn Ave N"}
+DISCOVERY_INPUT_EXAMPLE: dict[str, Any] = {"address": SAMPLE_ADDRESS}
 
 DISCOVERY_OUTPUT_EXAMPLE: dict[str, Any] = {
     "address_queried": "1700 Penn Ave N",

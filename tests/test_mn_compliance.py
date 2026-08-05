@@ -74,7 +74,11 @@ def test_unpaid_request_returns_402_with_valid_x402_header(
     response = client.get("/mn/property-check", params={"address": "1700 Penn Ave N"})
 
     assert response.status_code == 402
-    assert response.json()["error"] == "payment_required"
+    body = response.json()
+    assert body["error"] == "payment_required"
+    # Free sample pointer helps conversion without changing the cached challenge.
+    assert body["sample_url"].endswith("/mn/property-check/sample")
+    assert "sample" in body["how_to_pay"].lower()
 
     header = response.headers["PAYMENT-REQUIRED"]
     wire = json.loads(base64.b64decode(header))
@@ -85,6 +89,36 @@ def test_unpaid_request_returns_402_with_valid_x402_header(
     assert option.pay_to == TEST_PAY_TO
     assert option.amount == "10000"  # $0.01 USDC in atomic units
     assert option.network == settings.x402_default_network
+
+
+def test_free_sample_returns_live_report_without_payment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Freemium preview: fixed address only, never charges, never records demand."""
+    from app import demand
+
+    before = demand.challenges().get("mn-property-check", 0)
+
+    async def fake_report(address: str) -> dict:
+        assert address == mn_compliance.SAMPLE_ADDRESS
+        return {
+            "address_queried": address,
+            "compliance_verdict": "licensed_with_violations",
+            "licensed": True,
+        }
+
+    monkeypatch.setattr(mn_compliance, "check_property", fake_report)
+    response = client.get("/mn/property-check/sample")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sample"] is True
+    assert body["sample_address"] == mn_compliance.SAMPLE_ADDRESS
+    assert body["report"]["compliance_verdict"] == "licensed_with_violations"
+    assert body["paid_endpoint"].endswith("/mn/property-check")
+    assert body["price"] == settings.mn_property_check_price
+    # Sample must not inflate the paid funnel counter.
+    assert demand.challenges().get("mn-property-check", 0) == before
 
 
 def test_402_header_carries_bazaar_discovery(

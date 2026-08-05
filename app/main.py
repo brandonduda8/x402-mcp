@@ -646,6 +646,35 @@ async def stripe_webhook(
         return JSONResponse(status_code=400, content={"error": str(exc)})
 
 
+@app.get("/mn/property-check/sample")
+async def mn_property_check_sample() -> JSONResponse:
+    """Free fixed-address sample of the paid MN rental-compliance product.
+
+    Mirrors the /pulse free-preview pattern: agents can verify response shape
+    and live ArcGIS join quality before paying. Only SAMPLE_ADDRESS is served
+    here — any other address still requires x402 payment on /mn/property-check.
+    Does not touch payment, demand counters, or the challenge cache.
+    """
+    from app import mn_compliance
+
+    report = await mn_compliance.check_property(mn_compliance.SAMPLE_ADDRESS)
+    return JSONResponse(
+        content={
+            "sample": True,
+            "sample_address": mn_compliance.SAMPLE_ADDRESS,
+            "note": (
+                "Free fixed-address sample of the live join (3 City of Minneapolis "
+                "ArcGIS datasets). Query any other Minneapolis street address at "
+                f"{mn_compliance.resource_url()} for "
+                f"{settings.mn_property_check_price} USDC (x402 on Base)."
+            ),
+            "paid_endpoint": mn_compliance.resource_url(),
+            "price": settings.mn_property_check_price,
+            "report": report,
+        }
+    )
+
+
 @app.get("/mn/property-check")
 async def mn_property_check(
     request: Request,
@@ -691,6 +720,7 @@ async def mn_property_check(
         log.info("mn/property-check 402 (no signature)", extra={"address": address, "status_code": 402})
         if not demand.is_self_traffic(request.headers):
             demand.record_challenge("mn-property-check", request.headers.get("user-agent"))
+        base = settings.public_base_url.rstrip("/")
         return JSONResponse(
             status_code=402,
             headers={"PAYMENT-REQUIRED": payment_required},
@@ -700,8 +730,10 @@ async def mn_property_check(
                 "price": settings.mn_property_check_price,
                 "network": settings.x402_default_network,
                 "description": mn_compliance.RESOURCE_DESCRIPTION,
+                "sample_url": f"{base}/mn/property-check/sample",
                 "how_to_pay": "Retry with PAYMENT-SIGNATURE header (x402 v2); "
-                "requirements are in the PAYMENT-REQUIRED response header.",
+                "requirements are in the PAYMENT-REQUIRED response header. "
+                "Free fixed-address sample (no payment): GET /mn/property-check/sample.",
             },
         )
 

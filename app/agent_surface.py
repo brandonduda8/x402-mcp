@@ -62,6 +62,18 @@ def paid_resources() -> list[dict[str, Any]]:
             "params": {},
         },
         {
+            "url": f"{base}/mn/property-check/sample",
+            "method": "GET",
+            "price": "free",
+            "network": None,
+            "name": "Minneapolis rental compliance (free sample)",
+            "what": "Free fixed-address sample of the paid MN join: live "
+            "compliance_verdict + license / violation / condemned fields for "
+            "1700 Penn Ave N. Any other address requires payment at "
+            f"{base}/mn/property-check.",
+            "params": {},
+        },
+        {
             "url": f"{base}/mn/property-check",
             "method": "GET",
             "price": settings.mn_property_check_price,
@@ -70,7 +82,8 @@ def paid_resources() -> list[dict[str, Any]]:
             "what": "One-call compliance_verdict (licensed_clean | "
             "licensed_with_violations | unlicensed | condemned_or_boarded) plus "
             "rental license status, violation history, and condemned/boarded "
-            "flag for a Minneapolis street address, from city open data.",
+            "flag for a Minneapolis street address, from city open data. "
+            f"Free sample (fixed address): {base}/mn/property-check/sample.",
             "params": {"address": "street address string, 1-120 chars (required)"},
         },
         {

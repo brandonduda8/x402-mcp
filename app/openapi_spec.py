@@ -48,6 +48,7 @@ PUBLIC_FREE_PATHS: tuple[str, ...] = (
     "/.well-known/x402",
     "/.well-known/mcp",
     "/pulse",
+    "/mn/property-check/sample",
 )
 
 # What a crawler must never learn from us. Not used for filtering (the

@@ -49,6 +49,8 @@ def test_llms_txt_is_plain_text_with_live_prices() -> None:
     assert response.headers["content-type"].startswith("text/plain")
     assert settings.tx_decision_price in response.text
     assert "PAYMENT-SIGNATURE" in response.text
+    # Free MN sample is advertised so agents can verify quality before paying.
+    assert "/mn/property-check/sample" in response.text
 
 
 def test_llms_txt_documents_failure_modes_not_just_the_happy_path() -> None:
