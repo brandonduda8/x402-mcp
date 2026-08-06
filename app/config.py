@@ -156,6 +156,12 @@ class Settings(BaseSettings):
     )
     mn_property_check_price: str = "$0.01"
 
+    # US City Open-Data Compliance Network (app/city_compliance/) — multi-city
+    # paid property/rental/violation endpoints under /us/{code}/property-check.
+    # Includes Minneapolis (mn) as a network path; canonical MN product remains
+    # /mn/property-check. Price shared across network cities unless overridden.
+    city_network_price: str = "$0.01"
+
     # Middleware pilot (app/x402_middleware_pilot.py): a standalone route gated
     # via the x402 SDK's own FastAPI middleware (x402.http.middleware.fastapi)
     # instead of this repo's hand-rolled challenge/verify/settle path. Purely

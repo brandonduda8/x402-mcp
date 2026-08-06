@@ -33,6 +33,50 @@ def ownership_proofs() -> list[str]:
     return [p.strip() for p in settings.ownership_proofs.split(",") if p.strip()]
 
 
+def _us_city_paid_resources(base: str) -> list[dict[str, Any]]:
+    """US multi-city network resources (includes MN network path + samples)."""
+    try:
+        from app.city_compliance import registry
+    except Exception:  # pragma: no cover — import guard during partial deploys
+        return []
+
+    out: list[dict[str, Any]] = []
+    for entry in registry.list_cities():
+        code = entry["code"]
+        out.append(
+            {
+                "url": f"{base}/us/{code}/property-check/sample",
+                "method": "GET",
+                "price": "free",
+                "network": None,
+                "name": f"{entry['name']} compliance (free sample)",
+                "what": (
+                    f"Free fixed-address sample for {entry['name']}, {entry['state']}. "
+                    f"Sample address: {entry['sample_address']}. "
+                    f"Paid: {base}/us/{code}/property-check."
+                ),
+                "params": {},
+            }
+        )
+        out.append(
+            {
+                "url": f"{base}/us/{code}/property-check",
+                "method": "GET",
+                "price": entry["price"],
+                "network": settings.x402_default_network,
+                "name": entry["service_name"],
+                "what": (
+                    f"{entry['sources_label']}. "
+                    f"$0.01-class USDC on Base. Free sample: "
+                    f"{base}/us/{code}/property-check/sample. "
+                    f"Catalog: {base}/us/cities."
+                ),
+                "params": {"address": "street address string, 1-120 chars (required)"},
+            }
+        )
+    return out
+
+
 def paid_resources() -> list[dict[str, Any]]:
     """Every paid HTTP resource this deployment serves, priced from live config."""
     base = _base()
@@ -86,6 +130,19 @@ def paid_resources() -> list[dict[str, Any]]:
             f"Free sample (fixed address): {base}/mn/property-check/sample.",
             "params": {"address": "street address string, 1-120 chars (required)"},
         },
+        {
+            "url": f"{base}/us/cities",
+            "method": "GET",
+            "price": "free",
+            "network": None,
+            "name": "US City Open-Data Compliance Network (catalog)",
+            "what": "Free machine catalog of multi-city property compliance "
+            "endpoints (14 jurisdictions: mn, sea, nyc, chi, den, sf, lax, "
+            "bos, phi, orl, nola, moco, gain, kc): paid URLs, sample URLs, "
+            "price, and open-data sources.",
+            "params": {},
+        },
+        *_us_city_paid_resources(base),
         {
             "url": f"{base}/base/finality-check",
             "method": "GET",

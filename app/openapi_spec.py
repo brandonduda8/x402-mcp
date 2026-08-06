@@ -49,6 +49,8 @@ PUBLIC_FREE_PATHS: tuple[str, ...] = (
     "/.well-known/mcp",
     "/pulse",
     "/mn/property-check/sample",
+    "/us/cities",
+    "/us/{city_code}/property-check/sample",
 )
 
 # What a crawler must never learn from us. Not used for filtering (the
