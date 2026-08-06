@@ -148,10 +148,15 @@ def test_a_new_route_is_private_by_default(spec: dict) -> None:
         get_openapi(title=app.title, version=app.version, routes=app.routes)["paths"]
     )
     published = set(spec["paths"])
-    # Only the concrete purchase URL is published without being generated.
-    assert published - generated <= {
-        f"/swarm/products/{settings.pinned_pulse_product_id}/purchase"
+    # Concrete product URLs FastAPI cannot express as templates: pinned Pulse
+    # purchase id and per-city /us/{code}/property-check expansions.
+    from app.city_compliance import registry as city_registry
+
+    allowed_extra = {
+        f"/swarm/products/{settings.pinned_pulse_product_id}/purchase",
+        *(f"/us/{code}/property-check" for code in city_registry.known_codes()),
     }
+    assert published - generated <= allowed_extra
     assert len(generated - published) > 15, "the spec published its whole inventory"
 
 

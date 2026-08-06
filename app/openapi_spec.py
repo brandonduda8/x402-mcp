@@ -175,6 +175,7 @@ def output_examples() -> dict[str, dict[str, Any]]:
     the spec is built per request.
     """
     from app import finality_check, mn_compliance, tx_decision
+    from app.city_compliance import registry as city_registry
 
     examples: dict[str, dict[str, Any]] = {
         "/base/tx-decision": tx_decision.DISCOVERY_OUTPUT_EXAMPLE,
@@ -189,6 +190,10 @@ def output_examples() -> dict[str, dict[str, Any]]:
             "report": "Base mainnet: base fee 0.005 gwei, congestion low ...",
             "payment_settled": True,
         }
+    # Concrete per-city paid paths (x402scan matches the exact resource path).
+    for code in city_registry.known_codes():
+        mod = city_registry.get_city(code)
+        examples[f"/us/{code}/property-check"] = mod.discovery_output_example()
     return examples
 
 
@@ -302,6 +307,36 @@ def tighten(schema: dict[str, Any]) -> dict[str, Any]:
             concrete[method] = resolved
         if concrete:
             kept[path] = concrete
+
+    # US city network: FastAPI only emits `/us/{city_code}/property-check`, but
+    # agent_surface / paid_paths list concrete codes (`/us/sea/property-check`).
+    # x402scan rejects registration when the exact resource path is missing from
+    # openapi.json ("endpoint is not listed in the origin's openapi.json").
+    city_template = "/us/{city_code}/property-check"
+    city_ops = schema.get("paths", {}).get(city_template)
+    if city_ops:
+        for path, amount in priced.items():
+            if path in kept:
+                continue
+            if not path.startswith("/us/") or not path.endswith("/property-check"):
+                continue
+            if "/sample" in path:
+                continue
+            concrete_city: dict[str, Any] = {}
+            for method, operation in city_ops.items():
+                if method != "get" or not isinstance(operation, dict):
+                    continue
+                resolved = dict(operation)
+                # Path param is baked into the concrete URL.
+                resolved["parameters"] = [
+                    p
+                    for p in resolved.get("parameters", [])
+                    if p.get("name") != "city_code"
+                ]
+                _declare_paid(resolved, amount, examples.get(path))
+                concrete_city[method] = resolved
+            if concrete_city:
+                kept[path] = concrete_city
 
     schema["paths"] = kept
     schema["info"]["x-guidance"] = GUIDANCE
