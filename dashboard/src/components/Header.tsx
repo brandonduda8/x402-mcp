@@ -115,6 +115,42 @@ export function Header({
           <option value="operator">Operator</option>
         </select>
 
+        {/* Prominent Operating Mode Indicator Badge */}
+        <div
+          onClick={onToggleDemo}
+          title={
+            demo
+              ? "Currently in Public Ecosystem Showcase Mode. Click to switch to Private Operator Terminal."
+              : "Currently in Private Operator Terminal Mode. Click to switch to Public Ecosystem Showcase."
+          }
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "4px 10px",
+            borderRadius: "20px",
+            background: demo ? "rgba(245, 158, 11, 0.12)" : "rgba(0, 240, 255, 0.12)",
+            border: demo ? "1px solid rgba(245, 158, 11, 0.35)" : "1px solid rgba(0, 240, 255, 0.35)",
+            cursor: "pointer",
+            fontSize: "11px",
+            fontFamily: "var(--font-mono, monospace)",
+            fontWeight: 600,
+            color: demo ? "#F59E0B" : "#00F0FF",
+            transition: "all 0.2s ease-in-out",
+          }}
+        >
+          <span
+            style={{
+              width: "6px",
+              height: "6px",
+              borderRadius: "50%",
+              background: demo ? "#F59E0B" : "#00F0FF",
+              boxShadow: demo ? "0 0 8px #F59E0B" : "0 0 8px #00F0FF",
+            }}
+          />
+          {demo ? "🌐 Public Ecosystem Showcase" : "🛡️ Private Operator Terminal"}
+        </div>
+
         <label
           style={{
             display: "flex",
@@ -130,7 +166,7 @@ export function Header({
             checked={demo}
             onChange={onToggleDemo}
             style={{ cursor: "pointer" }}
-            aria-label="Toggle demo mode"
+            aria-label="Toggle public showcase demo mode"
           />
           Demo
         </label>
