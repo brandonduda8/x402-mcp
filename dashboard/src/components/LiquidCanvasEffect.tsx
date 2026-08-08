@@ -40,48 +40,64 @@ export function LiquidCanvasEffect() {
       step += 0.015;
       ctx.clearRect(0, 0, width, height);
 
-      // Create organic fluid liquid gradient layers
-      const grad = ctx.createRadialGradient(
+      // Primary Focused Mouse Liquid Glow Spotlight
+      const mouseGrad = ctx.createRadialGradient(
         mouseX,
         mouseY,
-        20,
+        5,
+        mouseX,
+        mouseY,
+        320
+      );
+      mouseGrad.addColorStop(0, "rgba(0, 240, 255, 0.55)");
+      mouseGrad.addColorStop(0.25, "rgba(59, 130, 246, 0.35)");
+      mouseGrad.addColorStop(0.65, "rgba(16, 185, 129, 0.18)");
+      mouseGrad.addColorStop(1, "transparent");
+
+      ctx.fillStyle = mouseGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // Secondary Ambient Canvas Gradient
+      const ambGrad = ctx.createRadialGradient(
+        width / 2,
+        height / 2,
+        50,
         width / 2,
         height / 2,
         Math.max(width, height)
       );
-      grad.addColorStop(0, "rgba(0, 240, 255, 0.15)");
-      grad.addColorStop(0.4, "rgba(59, 130, 246, 0.08)");
-      grad.addColorStop(0.8, "rgba(16, 185, 129, 0.05)");
-      grad.addColorStop(1, "transparent");
+      ambGrad.addColorStop(0, "rgba(0, 240, 255, 0.08)");
+      ambGrad.addColorStop(0.5, "rgba(139, 92, 246, 0.05)");
+      ambGrad.addColorStop(1, "transparent");
 
-      ctx.fillStyle = grad;
+      ctx.fillStyle = ambGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // Draw liquid wave curves
+      // Draw liquid wave curves (Cyan Neon Ripple)
       ctx.beginPath();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = "rgba(0, 240, 255, 0.2)";
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.45)";
 
-      for (let x = 0; x < width; x += 10) {
+      for (let x = 0; x < width; x += 8) {
         const y =
           height / 2 +
-          Math.sin(x * 0.01 + step) * 20 +
-          Math.cos(x * 0.005 + step * 0.7) * 15 +
-          Math.sin((x + mouseX) * 0.008) * 10;
+          Math.sin(x * 0.01 + step) * 22 +
+          Math.cos(x * 0.005 + step * 0.7) * 16 +
+          Math.sin((x + mouseX) * 0.008) * 12;
         if (x === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
       ctx.stroke();
 
-      // Second liquid wave curve (green accent)
+      // Second liquid wave curve (Emerald Green Accent)
       ctx.beginPath();
-      ctx.lineWidth = 1.0;
-      ctx.strokeStyle = "rgba(16, 185, 129, 0.18)";
-      for (let x = 0; x < width; x += 12) {
+      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = "rgba(16, 185, 129, 0.35)";
+      for (let x = 0; x < width; x += 10) {
         const y =
-          height / 2 + 30 +
-          Math.cos(x * 0.012 - step * 1.2) * 18 +
-          Math.sin(x * 0.006 + step) * 12;
+          height / 2 + 28 +
+          Math.cos(x * 0.012 - step * 1.2) * 20 +
+          Math.sin(x * 0.006 + step) * 14;
         if (x === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
