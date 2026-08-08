@@ -1,230 +1,156 @@
 import { useState } from "react";
+import { api } from "../api/client";
+import { CopyButton } from "./CopyButton";
+import { callsToBreakEven } from "../utils/breakEven";
+import { formatUsdcAtomic } from "../utils/usdc";
 
-interface SellerWizardProps {
-  open: boolean;
-  onClose: () => void;
-  defaultNetwork: string;
-  payToAddress: string | null;
-  dashboardActions: boolean;
-  defaultPrice: string;
-}
+const SEPOLIA = "eip155:84532";
+const MAINNET = "eip155:8453";
 
 export function SellerWizard({
   open,
   onClose,
-  defaultNetwork,
-  payToAddress,
-  dashboardActions,
-  defaultPrice,
-}: SellerWizardProps) {
-  const [network, setNetwork] = useState(defaultNetwork);
-  const [price, setPrice] = useState(defaultPrice);
-  const [description, setDescription] = useState("Paid API access");
+  netAtomic,
+  actionsEnabled,
+}: {
+  open: boolean;
+  onClose: () => void;
+  netAtomic: number;
+  actionsEnabled: boolean;
+}) {
+  const [network, setNetwork] = useState(SEPOLIA);
+  const [price, setPrice] = useState("$0.01");
+  const [description, setDescription] = useState("Paid MCP-backed API access");
+  const [mainnetConfirm, setMainnetConfirm] = useState("");
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [mainnetConfirm, setMainnetConfirm] = useState("");
-
-  const isMainnet = network.includes("8453") && !network.includes("84532");
-  const mainnetLocked = isMainnet && mainnetConfirm.toLowerCase() !== network;
 
   if (!open) return null;
 
-  async function handleBuild() {
-    setError(null);
-    setResult(null);
+  const breakEvenCalls = callsToBreakEven(netAtomic, price);
+  const mainnetBlocked = network === MAINNET && mainnetConfirm !== "eip155:8453";
 
-    if (dashboardActions) {
-      setLoading(true);
-      try {
-        const resp = await fetch("/seller/requirements", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ network, price, description }),
-        });
-        if (!resp.ok) {
-          const body = await resp.json().catch(() => ({}));
-          throw new Error(body.detail || `HTTP ${resp.status}`);
-        }
-        setResult(await resp.json());
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed");
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      // Show the MCP tool invocation
-      setResult({
-        _invocation: true,
-        tool: "build_seller_requirements",
-        params: { network, price, description, pay_to: payToAddress || "<your-address>" },
-      });
-    }
-  }
+  const mcpCommand = `build_seller_requirements(network="${network}", price="${price}", description="${description}")`;
 
-  // Break-even math
-  const priceNum = parseFloat(price.replace(/[^0-9.]/g, "")) || 0;
-  const breakEvenCalls = priceNum > 0 ? Math.ceil(0.37 / priceNum) : 0;
+  const fastApiSnippet = `from fastapi import FastAPI, HTTPException
+
+app = FastAPI()
+
+@app.get("/paid")
+async def paid_resource():
+    raise HTTPException(
+        status_code=402,
+        detail={"payment": "requirements from build_seller_requirements"},
+    )`;
 
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0, 0, 0, 0.7)",
+        background: "rgba(0,0,0,0.7)",
+        zIndex: 15,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 100,
       }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
       role="dialog"
       aria-label="Sell something wizard"
     >
-      <div
-        style={{
-          background: "var(--color-panel)",
-          border: "1px solid var(--color-border)",
-          borderRadius: "12px",
-          padding: "24px",
-          maxWidth: "560px",
-          width: "90vw",
-          maxHeight: "80vh",
-          overflow: "auto",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
-          <h2 style={{ fontSize: "16px", fontWeight: 600 }}>Sell Something</h2>
-          <button onClick={onClose} style={closeBtnStyle} aria-label="Close">x</button>
-        </div>
+      <div className="panel" style={{ width: 520, maxHeight: "85vh", overflow: "auto" }}>
+        <h2>Sell something</h2>
+        <p style={{ color: "var(--text-muted)", fontSize: 14 }}>
+          Build seller payment requirements. This does not move funds.
+        </p>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <Field label="Price">
-            <input
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              style={inputStyle}
-              placeholder="$0.01"
-              aria-label="Price"
-            />
-          </Field>
-
-          <Field label="Network">
-            <select value={network} onChange={(e) => setNetwork(e.target.value)} style={inputStyle} aria-label="Network">
-              <option value="eip155:84532">Base Sepolia (testnet)</option>
-              <option value="eip155:8453">Base Mainnet (real money)</option>
-            </select>
-          </Field>
-
-          {isMainnet && (
-            <div style={{ padding: "10px", background: "rgba(229, 72, 77, 0.1)", borderRadius: "6px", fontSize: "13px" }}>
-              <strong style={{ color: "var(--color-red)" }}>This spends real USDC on Base Mainnet.</strong>
-              <div style={{ marginTop: "8px" }}>
-                Type the network ID to confirm: <code className="mono" style={{ fontSize: "11px" }}>{network}</code>
-              </div>
+        <label>
+          Price
+          <input value={price} onChange={(e) => setPrice(e.target.value)} style={{ width: "100%" }} />
+        </label>
+        <label style={{ display: "block", marginTop: 8 }}>
+          Network
+          <select value={network} onChange={(e) => setNetwork(e.target.value)} style={{ width: "100%" }}>
+            <option value={SEPOLIA}>Base Sepolia (testnet)</option>
+            <option value={MAINNET}>Base mainnet (real USDC)</option>
+          </select>
+        </label>
+        {network === MAINNET && (
+          <div style={{ marginTop: 8 }}>
+            <p style={{ color: "var(--red)", fontSize: 13 }}>
+              This spends real USDC on Base mainnet — up to {price} per call.
+            </p>
+            <label>
+              Type <code>eip155:8453</code> to confirm
               <input
                 value={mainnetConfirm}
                 onChange={(e) => setMainnetConfirm(e.target.value)}
-                placeholder={network}
-                style={{ ...inputStyle, marginTop: "6px", fontSize: "12px" }}
-                aria-label="Confirm mainnet network"
+                style={{ width: "100%" }}
               />
-            </div>
-          )}
+            </label>
+          </div>
+        )}
+        <label style={{ display: "block", marginTop: 8 }}>
+          Description
+          <input value={description} onChange={(e) => setDescription(e.target.value)} style={{ width: "100%" }} />
+        </label>
 
-          <Field label="Description">
-            <input
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              style={inputStyle}
-              placeholder="Paid API access"
-              aria-label="Description"
-            />
-          </Field>
-
-          <button
-            onClick={handleBuild}
-            disabled={loading || mainnetLocked || !price}
-            style={{
-              ...btnStyle,
-              opacity: loading || mainnetLocked ? 0.5 : 1,
-            }}
-          >
-            {loading ? "Building…" : "Build Requirements"}
-          </button>
-
-          {priceNum > 0 && (
-            <div style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
-              At {price}/call, {breakEvenCalls} verified calls covers a typical month's spend.
-            </div>
-          )}
+        <div style={{ marginTop: 12 }}>
+          <strong>MCP invocation</strong>
+          <pre className="mono" style={{ fontSize: 12 }}>{mcpCommand}</pre>
+          <CopyButton value={mcpCommand} label="Copy MCP cmd" />
         </div>
 
-        {error && (
-          <div style={{ color: "var(--color-red)", fontSize: "13px", marginTop: "12px" }}>
-            {error}
+        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            disabled={mainnetBlocked}
+            onClick={async () => {
+              setError(null);
+              if (!actionsEnabled) {
+                setError("DASHBOARD_ACTIONS=false — copy the MCP command above or enable actions in server env.");
+                return;
+              }
+              try {
+                const res = await api.sellerRequirements({ network, price, description });
+                setResult(res);
+              } catch (e) {
+                setError(e instanceof Error ? e.message : String(e));
+              }
+            }}
+          >
+            Build via API
+          </button>
+        </div>
+
+        {error && <p style={{ color: "var(--red)", fontSize: 13 }}>{error}</p>}
+
+        {result && (
+          <div style={{ marginTop: 12 }}>
+            <strong>Requirements JSON</strong>
+            <pre className="mono" style={{ fontSize: 11, maxHeight: 160, overflow: "auto" }}>
+              {JSON.stringify(result, null, 2)}
+            </pre>
+            <CopyButton value={JSON.stringify(result, null, 2)} label="Copy JSON" />
           </div>
         )}
 
-        {result && (
-          <div style={{ marginTop: "16px" }}>
-            <div className="panel-title">
-              {(result as Record<string, unknown>)._invocation ? "MCP Tool Invocation" : "Requirements JSON"}
-            </div>
-            <pre
-              style={{
-                background: "var(--color-base)",
-                borderRadius: "6px",
-                padding: "12px",
-                fontSize: "11px",
-                fontFamily: "var(--font-mono)",
-                overflow: "auto",
-                maxHeight: "200px",
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {JSON.stringify(result, null, 2)}
-            </pre>
-          </div>
+        <div style={{ marginTop: 12 }}>
+          <strong>Minimal FastAPI 402 gate</strong>
+          <pre className="mono" style={{ fontSize: 11 }}>{fastApiSnippet}</pre>
+          <CopyButton value={fastApiSnippet} label="Copy snippet" />
+        </div>
+
+        {breakEvenCalls != null && (
+          <p style={{ fontSize: 13, color: "var(--amber)" }}>
+            At {price}/call, {breakEvenCalls} verified calls covers the current gap (
+            {formatUsdcAtomic(Math.abs(netAtomic))}).
+          </p>
         )}
+
+        <button type="button" style={{ marginTop: 12 }} onClick={onClose}>
+          Close
+        </button>
       </div>
     </div>
   );
 }
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: "flex", flexDirection: "column", gap: "4px", fontSize: "13px" }}>
-      <span style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-const inputStyle: React.CSSProperties = {
-  background: "var(--color-base)",
-  border: "1px solid var(--color-border)",
-  borderRadius: "6px",
-  color: "var(--color-text)",
-  padding: "8px 12px",
-  fontSize: "13px",
-};
-
-const btnStyle: React.CSSProperties = {
-  background: "var(--color-usdc)",
-  border: "none",
-  borderRadius: "6px",
-  color: "white",
-  padding: "10px 16px",
-  fontSize: "14px",
-  fontWeight: 500,
-  cursor: "pointer",
-};
-
-const closeBtnStyle: React.CSSProperties = {
-  background: "none",
-  border: "none",
-  color: "var(--color-text-muted)",
-  fontSize: "18px",
-  cursor: "pointer",
-};

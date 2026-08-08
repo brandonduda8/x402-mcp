@@ -3,10 +3,13 @@ __pycache__/
 .pytest_cache/
 *.pyc
 .env
-.env.*
-!.env.example
-.keys/
+.env.local
+.vercel/
 .mcp.json
 dashboard/node_modules/
 dashboard/dist/
-dashboard/tsconfig.tsbuildinfo
+ledger/*
+!ledger/policy.json
+!ledger/.gitignore
+.vercel
+.env*

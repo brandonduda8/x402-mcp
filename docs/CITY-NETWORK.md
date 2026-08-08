@@ -1,0 +1,56 @@
+# US City Open-Data Compliance Network
+
+Multi-city paid x402 product under `/us/{code}/property-check`.
+
+## Cities (v1–v2)
+
+| Code | City | State | Open data focus |
+|------|------|-------|-----------------|
+| `mn` | Minneapolis | MN | Rental licenses + violations + condemned (delegates to `app.mn_compliance`) |
+| `sea` | Seattle | WA | RRIO rental registration (Socrata) |
+| `nyc` | New York City | NY | HPD multi-dwelling registration + HMC violations |
+| `chi` | Chicago | IL | Building code violations (no citywide rental license feed) |
+| `den` | Denver | CO | Short-term rental licenses |
+| `sf` | San Francisco | CA | DBI notices of violation |
+| `lax` | Los Angeles | CA | Open Building & Safety code enforcement cases |
+| `bos` | Boston | MA | Building and property violations (CKAN) |
+| `phi` | Philadelphia | PA | L&I property maintenance violations (Carto) |
+| `orl` | Orlando | FL | Short-term rental licenses |
+| `nola` | New Orleans | LA | Active short-term rental licenses |
+| `moco` | Montgomery County | MD | Housing licensing + active code violations |
+| `gain` | Gainesville | FL | Code complaints / violations / permits |
+| `kc` | Kansas City | MO | Open exterior building violations |
+
+### Search notes (2026-08-06)
+
+Public Socrata catalog sweep across 80+ domains found **88** rental/violation-related resources.
+Skipped for now (no address column, 403, or non-queryable): Cambridge STR (lat/long only),
+Oakland rental list (403 non-tabular), Cincinnati code (coords only), many ArcGIS-only portals.
+
+## Endpoints
+
+| Method | Path | Price |
+|--------|------|-------|
+| GET | `/us/cities` | free catalog |
+| GET | `/us/{code}/property-check/sample` | free fixed-address sample |
+| GET | `/us/{code}/property-check?address=` | `$0.01` USDC on Base (`city_network_price`) |
+
+Minneapolis **canonical** path remains `/mn/property-check` (unchanged).  
+Network path `/us/mn/property-check` is a uniform-envelope alias for catalog agents.
+
+## Wire protocol
+
+Same as MN: unpaid → HTTP 402 + `PAYMENT-REQUIRED` **before** address validation;
+paid path validates address then verify+settle; `PAYMENT-RESPONSE` on success.
+
+## Config
+
+- `CITY_NETWORK_PRICE` / `city_network_price` (default `$0.01`)
+- Existing `MN_*` settings still drive the ArcGIS join for both `/mn/*` and `/us/mn/*`
+
+## Adding a city
+
+1. `app/city_compliance/cities/{code}.py` with `SPEC`, `check_property`, `discovery_output_example`
+2. Register module in `app/city_compliance/registry.py` `_MODULES`
+3. Extend tests in `tests/test_city_compliance.py`
+4. Live-probe sample address before deploy

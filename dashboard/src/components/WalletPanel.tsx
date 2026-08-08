@@ -1,115 +1,67 @@
-import type { WalletResponse } from "../types/api";
-import { truncateHash } from "../lib/format";
+import { CopyButton } from "./CopyButton";
+import { PanelHelp } from "./PanelHelp";
+import { formatUsdcAtomic } from "../utils/usdc";
 
-interface WalletPanelProps {
-  wallet: WalletResponse | null;
-  density: string;
-}
+export type WalletSnapshot = {
+  receive_address: string | null;
+  vault_address: string | null;
+  balances: {
+    sepolia_usdc_atomic: number | null;
+    mainnet_usdc_atomic: number | null;
+  };
+  faucet_url: string;
+  note: string;
+};
 
-export function WalletPanel({ wallet, density }: WalletPanelProps) {
+const LOW_BALANCE_ATOMIC = 50_000; // ~5 testnet payments at $0.01
+
+export function WalletPanel({ wallet, density }: { wallet: WalletSnapshot | null; density: string }) {
   if (!wallet) {
     return (
-      <div className="panel" style={{ gridColumn: "span 6" }}>
-        <div className="panel-title">Wallet</div>
-        <div className="empty-state">
-          <span>Loading wallet info…</span>
-        </div>
-      </div>
+      <p style={{ color: "var(--text-muted)", fontSize: 14 }}>
+        Wallet data unavailable — is the API running?
+      </p>
     );
   }
 
-  const hasAnyAddress = wallet.vault_address || wallet.pay_to_address;
+  const sepolia = wallet.balances.sepolia_usdc_atomic;
+  const low = sepolia != null && sepolia < LOW_BALANCE_ATOMIC;
 
   return (
-    <div className="panel" style={{ gridColumn: "span 6" }}>
-      <div className="panel-title">
-        Wallet
-        {density === "guided" && (
-          <span
-            title="Public wallet addresses and balances. Private keys stay in your .env — never displayed here."
-            style={{ cursor: "help", opacity: 0.6 }}
-          >
-            ?
-          </span>
-        )}
+    <div>
+      <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 0 }}>{wallet.note}</p>
+      <div style={{ marginBottom: 8 }}>
+        <strong>{density === "guided" ? "Receive payments at" : "Receive"}</strong>
+        <div className="mono" style={{ fontSize: 12, wordBreak: "break-all" }}>
+          {wallet.receive_address ?? "Not set — add X402_PAY_TO_ADDRESS"}
+        </div>
+        {wallet.receive_address && <CopyButton value={wallet.receive_address} label="Address" />}
       </div>
-
-      {!hasAnyAddress ? (
-        <div className="empty-state">
-          <span>No wallet configured</span>
-          <span style={{ fontSize: "12px" }}>
-            Set <code>X402_PAY_TO_ADDRESS</code> in .env to receive payments
-          </span>
+      <div style={{ marginBottom: 8 }}>
+        <strong>{density === "guided" ? "Pay from (vault)" : "Vault"}</strong>
+        <PanelHelp term="facilitator" title="Vault" />
+        <div className="mono" style={{ fontSize: 12, wordBreak: "break-all" }}>
+          {wallet.vault_address ?? "Optional — set EVM_PRIVATE_KEY for paying"}
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {wallet.vault_address && (
-            <AddressRow
-              label="Vault (buyer)"
-              address={wallet.vault_address}
-              balance={wallet.balances.vault}
-              density={density}
-            />
-          )}
-          {wallet.pay_to_address && (
-            <AddressRow
-              label="Pay-To (seller)"
-              address={wallet.pay_to_address}
-              balance={wallet.balances.pay_to}
-              density={density}
-            />
-          )}
-          <div style={{ fontSize: "11px", color: "var(--color-text-muted)", fontStyle: "italic" }}>
-            Private keys stay in server .env — never displayed or transmitted.
-          </div>
+        {wallet.vault_address && <CopyButton value={wallet.vault_address} label="Vault" />}
+      </div>
+      <div className="mono" style={{ fontSize: 13 }}>
+        <div>Sepolia USDC: {sepolia == null ? "—" : formatUsdcAtomic(sepolia)}</div>
+        <div>
+          Mainnet USDC:{" "}
+          {wallet.balances.mainnet_usdc_atomic == null
+            ? "—"
+            : formatUsdcAtomic(wallet.balances.mainnet_usdc_atomic)}
         </div>
+      </div>
+      {low && (
+        <p style={{ color: "var(--amber)", fontSize: 13 }}>
+          Low testnet balance — fund via faucet before paid fetches.
+        </p>
       )}
-    </div>
-  );
-}
-
-function AddressRow({
-  label,
-  address,
-  balance,
-  density,
-}: {
-  label: string;
-  address: string;
-  balance?: { usdc_human: string; funded: boolean; usdc_atomic: number };
-  density: string;
-}) {
-  const lowBalance = balance && !balance.funded;
-  return (
-    <div style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid var(--color-border)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>{label}</span>
-        {balance && (
-          <span className="mono" style={{ fontSize: "13px", color: "var(--color-usdc)" }}>
-            ${balance.usdc_human} USDC
-          </span>
-        )}
-      </div>
-      <div
-        className="mono"
-        style={{ fontSize: "12px", color: "var(--color-text)", marginTop: "4px" }}
-        title={address}
-      >
-        {density === "operator" ? address : truncateHash(address, 8)}
-      </div>
-      {lowBalance && (
-        <div style={{ fontSize: "11px", color: "var(--color-amber)", marginTop: "4px" }}>
-          Low balance —{" "}
-          <a
-            href="https://portal.cdp.coinbase.com/products/faucet"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "var(--color-amber)" }}
-          >
-            Get testnet USDC
-          </a>
-        </div>
-      )}
+      <a href={wallet.faucet_url} target="_blank" rel="noreferrer">
+        Base Sepolia CDP faucet
+      </a>
     </div>
   );
 }

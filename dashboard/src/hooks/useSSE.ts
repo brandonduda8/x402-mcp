@@ -1,108 +1,78 @@
-/** SSE client with 10s-polling fallback and truthful connection status. */
-
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ConnectionStatus, ToolEvent } from "../types/api";
+import { backoffMs, shouldReconnect, STATS_POLL_MS, type LiveStatus } from "./sseReconnect";
 
-const MAX_EVENTS = 200;
-const POLL_INTERVAL = 10_000;
-const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 15000];
+export type { LiveStatus };
+export type StreamEvent = {
+  type?: string;
+  ts: string;
+  tool?: string;
+  agent_id?: string;
+  meta?: Record<string, unknown>;
+};
 
-export function useSSE(baseUrl: string, demo: boolean) {
-  const [events, setEvents] = useState<ToolEvent[]>([]);
-  const [status, setStatus] = useState<ConnectionStatus>("disconnected");
-  const retryCount = useRef(0);
+export function useSSE(enabled: boolean, onEvent: (e: StreamEvent) => void) {
+  const [status, setStatus] = useState<LiveStatus>("dead");
+  const [reconnectNonce, setReconnectNonce] = useState(0);
   const esRef = useRef<EventSource | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectAttemptRef = useRef(0);
 
-  const addEvents = useCallback((incoming: ToolEvent[]) => {
-    setEvents((prev) => {
-      const combined = [...prev, ...incoming.filter((e) => e.type !== "heartbeat")];
-      return combined.slice(-MAX_EVENTS);
-    });
-  }, []);
-
-  // Polling fallback
-  const startPolling = useCallback(() => {
-    if (pollRef.current) return;
-    setStatus("polling");
-    pollRef.current = setInterval(async () => {
-      try {
-        const resp = await fetch(`${baseUrl}/stats`);
-        if (resp.ok) {
-          setStatus("polling");
-        }
-      } catch {
-        setStatus("disconnected");
-      }
-    }, POLL_INTERVAL);
-  }, [baseUrl]);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
-  // SSE connection
   const connect = useCallback(() => {
-    if (demo) return;
-
-    const es = new EventSource(`${baseUrl}/events`);
+    if (!enabled) return;
+    esRef.current?.close();
+    const es = new EventSource("/api/events");
     esRef.current = es;
-
     es.onopen = () => {
-      setStatus("connected");
-      retryCount.current = 0;
-      stopPolling();
+      reconnectAttemptRef.current = 0;
+      setStatus("live");
     };
-
-    es.onmessage = (e) => {
+    es.onmessage = (msg) => {
       try {
-        const data = JSON.parse(e.data) as ToolEvent;
+        const data = JSON.parse(msg.data) as StreamEvent;
         if (data.type === "heartbeat") {
-          // Heartbeat received — connection is alive
-          setStatus("connected");
+          reconnectAttemptRef.current = 0;
+          setStatus("live");
           return;
         }
-        addEvents([data]);
+        onEvent(data);
+        reconnectAttemptRef.current = 0;
+        setStatus("live");
       } catch {
-        // Malformed SSE data — ignore
+        /* ignore */
       }
     };
-
     es.onerror = () => {
+      setStatus("polling");
       es.close();
-      esRef.current = null;
-      const delay =
-        RECONNECT_DELAYS[
-          Math.min(retryCount.current, RECONNECT_DELAYS.length - 1)
-        ];
-      retryCount.current++;
-
-      // Fall back to polling while reconnecting
-      startPolling();
-
-      setTimeout(() => {
-        connect();
-      }, delay);
+      setReconnectNonce((n) => n + 1);
     };
-  }, [baseUrl, demo, addEvents, startPolling, stopPolling]);
+  }, [enabled, onEvent]);
 
   useEffect(() => {
-    if (demo) {
-      setStatus("connected");
-      return;
-    }
-
     connect();
+    return () => esRef.current?.close();
+  }, [connect]);
 
-    return () => {
-      esRef.current?.close();
-      esRef.current = null;
-      stopPolling();
-    };
-  }, [connect, demo, stopPolling]);
+  useEffect(() => {
+    if (!shouldReconnect(status, enabled)) return;
 
-  return { events, status, addEvents };
+    const delay = backoffMs(reconnectAttemptRef.current);
+    reconnectAttemptRef.current += 1;
+    const reconnectId = setTimeout(() => connect(), delay);
+    return () => clearTimeout(reconnectId);
+  }, [status, enabled, reconnectNonce, connect]);
+
+  useEffect(() => {
+    if (!enabled || status !== "polling") return;
+    const id = setInterval(async () => {
+      try {
+        await fetch("/api/stats");
+        setStatus("polling");
+      } catch {
+        setStatus("dead");
+      }
+    }, STATS_POLL_MS);
+    return () => clearInterval(id);
+  }, [enabled, status]);
+
+  return { status, reconnect: connect };
 }

@@ -30,6 +30,13 @@ _MOCK_SUPPORTED = {
     "kinds": [
         {"x402Version": 2, "scheme": "exact", "network": "eip155:84532"},
         {"x402Version": 2, "scheme": "exact", "network": "eip155:8453"},
+        # x402.org also advertises Solana mainnet — the multichain seller
+        # tests need it in supported kinds or scheme resolution fails.
+        {
+            "x402Version": 2,
+            "scheme": "exact",
+            "network": "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+        },
     ],
     "extensions": [],
     "signers": {},
@@ -142,3 +149,31 @@ def probe_402_url() -> str:
     thread.start()
     yield f"http://127.0.0.1:{port}/paid"
     server.shutdown()
+
+
+@pytest.fixture(autouse=True)
+def _clear_challenge_cache():
+    """The 402-challenge cache is module-level and would otherwise leak a built
+    header (and its stubbed build_seller_requirements output) across tests."""
+    from app import challenge_cache
+
+    challenge_cache._mem.clear()
+    yield
+    challenge_cache._mem.clear()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolated_swarm_registry(tmp_path_factory):
+    """Point the swarm registry singleton at a tmp products file so tests
+    never read or write the operator's real ledger/products.json."""
+    from app.swarm.registry import swarm_registry
+
+    old_path = swarm_registry.persist_path
+    old_products = dict(swarm_registry._products)
+    swarm_registry.persist_path = (
+        tmp_path_factory.mktemp("swarm-registry") / "products.json"
+    )
+    swarm_registry._products.clear()
+    yield
+    swarm_registry.persist_path = old_path
+    swarm_registry._products = old_products

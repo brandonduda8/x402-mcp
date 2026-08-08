@@ -1,112 +1,90 @@
-import type { LedgerRow, StatsResponse } from "../types/api";
-
-interface MissionProgressProps {
-  stats: StatsResponse | null;
-  spend: LedgerRow[];
-  revenue: LedgerRow[];
-  connected: boolean;
-  density: string;
-}
-
-interface Step {
-  id: string;
-  label: string;
-  passed: boolean;
-}
+import type { MissionStep } from "../utils/mission";
 
 export function MissionProgress({
-  stats,
-  spend,
-  revenue,
-  connected,
-  density,
-}: MissionProgressProps) {
-  const config = stats?.config;
-  const agents = stats?.agents ?? [];
-  const totalCalls = agents.reduce((s, a) => s + a.calls_this_month, 0);
-  const totalSpend = spend.reduce((s, r) => s + (r.amount_usdc ?? 0), 0);
-  const totalRevenue = revenue.reduce((s, r) => s + (r.amount_usdc ?? 0), 0);
-  const net = totalRevenue - totalSpend;
-
-  const hasDiscovery = agents.some(
-    (a) => a.agent_id.includes("scout") && a.calls_this_month > 0,
-  );
-  const hasProbe = totalCalls > 0;
-
-  const steps: Step[] = [
-    { id: "server", label: "Server up", passed: stats !== null },
-    { id: "dashboard", label: "Dashboard connected", passed: connected },
-    { id: "discovery", label: "First discovery", passed: hasDiscovery || totalCalls > 0 },
-    { id: "probe", label: "First probe", passed: hasProbe },
-    { id: "funded", label: "Testnet funded", passed: config?.has_buyer_key ?? false },
-    { id: "paid_fetch", label: "First paid fetch", passed: spend.length > 0 },
-    { id: "seller_config", label: "First seller config", passed: config?.has_pay_to ?? false },
-    { id: "revenue", label: "First verified revenue", passed: revenue.length > 0 },
-    { id: "net_positive", label: "Net >= 0", passed: net >= 0 && (spend.length > 0 || revenue.length > 0) },
-  ];
-
-  const completed = steps.filter((s) => s.passed).length;
-
-  if (density === "operator") return null;
+  steps,
+  open,
+  onToggle,
+}: {
+  steps: MissionStep[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const done = steps.filter((s) => s.done).length;
+  const pct = Math.round((done / (steps.length || 1)) * 100);
 
   return (
-    <div className="panel" style={{ gridColumn: "span 6" }}>
-      <div className="panel-title">
-        Mission Progress
-        {density === "guided" && (
-          <span
-            title="Track your journey from first clone to net-positive revenue."
-            style={{ cursor: "help", opacity: 0.6 }}
-          >
-            ?
-          </span>
-        )}
-        <span style={{ marginLeft: "auto", fontSize: "11px" }}>
-          {completed}/{steps.length}
-        </span>
-      </div>
-
-      {/* Compact progress bar */}
-      <div
-        style={{
-          height: "4px",
-          background: "var(--color-border)",
-          borderRadius: "2px",
-          overflow: "hidden",
-          marginBottom: "12px",
-        }}
-      >
-        <div
+    <div className="panel" style={{ margin: "0 16px 16px", padding: "14px 20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <button
+          type="button"
+          onClick={onToggle}
           style={{
-            height: "100%",
-            width: `${(completed / steps.length) * 100}%`,
-            background: completed === steps.length ? "var(--color-green)" : "var(--color-usdc)",
-            borderRadius: "2px",
-            transition: "width 150ms ease-out",
+            background: "transparent",
+            border: "none",
+            color: "var(--text)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: 0,
+            fontFamily: "var(--font-heading)",
+            fontSize: 15,
+            fontWeight: 600,
           }}
-        />
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-        {steps.map((step) => (
+        >
+          <span style={{ color: "var(--neon-cyan)", fontSize: 16 }}>{open ? "▾" : "▸"}</span>
+          <span>Mission Progress</span>
+          <span className="mono" style={{ fontSize: 13, color: "var(--text-muted)", background: "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: 10 }}>
+            {done}/{steps.length} ({pct}%)
+          </span>
+        </button>
+        <div style={{ width: 140, height: 6, background: "rgba(255,255,255,0.08)", borderRadius: 3, overflow: "hidden" }}>
           <div
-            key={step.id}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              fontSize: "12px",
-              opacity: step.passed ? 1 : 0.6,
+              width: `${pct}%`,
+              height: "100%",
+              background: "linear-gradient(90deg, var(--neon-cyan), var(--green))",
+              transition: "width 0.4s ease",
             }}
-          >
-            <span
-              className={`dot ${step.passed ? "dot-green" : "dot-amber"}`}
-              aria-hidden="true"
-            />
-            <span>{step.passed ? "Done" : "Todo"}: {step.label}</span>
-          </div>
-        ))}
+          />
+        </div>
       </div>
+      {open && (
+        <ol style={{ margin: "14px 0 0", paddingLeft: 24, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "8px 16px" }}>
+          {steps.map((s) => (
+            <li
+              key={s.id}
+              style={{
+                color: s.done ? "var(--green)" : "var(--text-muted)",
+                fontSize: 13,
+                fontWeight: s.done ? 600 : 400,
+                listStyleType: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 18,
+                  height: 18,
+                  borderRadius: "50%",
+                  fontSize: 11,
+                  background: s.done ? "rgba(16, 185, 129, 0.15)" : "rgba(255,255,255,0.05)",
+                  color: s.done ? "var(--green)" : "var(--text-muted)",
+                  border: `1px solid ${s.done ? "var(--green)" : "rgba(255,255,255,0.1)"}`,
+                }}
+              >
+                {s.done ? "✓" : "○"}
+              </span>
+              <span>{s.label}</span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

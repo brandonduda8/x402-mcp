@@ -88,8 +88,6 @@ async def test_quota_consumed_before_work_on_rate_limit(monkeypatch: pytest.Monk
 
 @pytest.mark.asyncio
 async def test_build_seller_requirements_missing_config(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.config import settings
-
     monkeypatch.setattr(settings, "x402_pay_to_address", None)
     with pytest.raises(ValueError, match="pay_to address required"):
         await mcp_server.build_seller_requirements(agent_id="seller-skip-agent")
@@ -97,8 +95,6 @@ async def test_build_seller_requirements_missing_config(monkeypatch: pytest.Monk
 
 @pytest.mark.asyncio
 async def test_pay_and_fetch_missing_wallet(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.config import settings
-
     monkeypatch.setattr(settings, "evm_private_key", None)
     with pytest.raises(ValueError, match="EVM_PRIVATE_KEY"):
         await mcp_server.pay_and_fetch(
@@ -123,6 +119,9 @@ async def test_get_payment_requirements_tool_invocable(probe_402_url: str) -> No
 async def test_pro_upgrade_agent_id_matches_meta(monkeypatch: pytest.MonkeyPatch) -> None:
     """agent_id=None must resolve once — meta and data must share the same id."""
     monkeypatch.setattr(settings, "x402_pay_to_address", "0xTestPayTo00000000000000000000000001")
+    # Pin the testnet/x402.org path: a local .env with CDP creds would resolve
+    # the revenue network to mainnet and route this through the CDP facilitator.
+    monkeypatch.setattr(settings, "revenue_network", "eip155:84532")
 
     raw = await mcp_server.get_pro_upgrade_requirements(agent_id=None)
     payload = json.loads(raw)
@@ -135,6 +134,7 @@ async def test_tool_credits_requirements_agent_id_matches_meta(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "x402_pay_to_address", "0xTestPayTo00000000000000000000000001")
+    monkeypatch.setattr(settings, "revenue_network", "eip155:84532")
 
     raw = await mcp_server.get_tool_credits_requirements(agent_id=None, credits=50)
     payload = json.loads(raw)
@@ -220,3 +220,27 @@ async def test_purchase_tool_credits_through_mcp_wrapper(
     assert payload["data"]["credits_purchased"] == 25
     assert payload["data"]["tool_credits_remaining"] == 25
     assert store.get_credits(payload["meta"]["agent_id"]) == 25
+
+
+@pytest.mark.asyncio
+async def test_create_stripe_checkout_through_mcp_wrapper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import MagicMock, patch
+
+    monkeypatch.setattr(settings, "stripe_secret_key", "sk_test_mcp")
+
+    mock_session = MagicMock()
+    mock_session.url = "https://checkout.stripe.com/c/pay/cs_mcp"
+    mock_session.id = "cs_mcp"
+
+    with patch("stripe.checkout.Session.create", return_value=mock_session):
+        raw = await mcp_server.create_stripe_checkout(
+            purpose="pro_tier_upgrade",
+            agent_id=None,
+        )
+
+    payload = json.loads(raw)
+    assert payload["meta"]["agent_id"] == payload["data"]["agent_id"]
+    assert payload["data"]["checkout_url"] == "https://checkout.stripe.com/c/pay/cs_mcp"
+    assert payload["data"]["purpose"] == "pro_tier_upgrade"

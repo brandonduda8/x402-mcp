@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from app.commerce import QuotaExceededError, quota_store
 from app.config import settings
@@ -18,8 +20,32 @@ from app.models import (
     ToolResponse,
     VerifyPaymentInput,
 )
-from app import x402_services
+from app import stripe_payments, x402_services
 from app.ops_events import emit_tool_event
+from app.swarm import orchestrator as swarm_orchestrator
+
+
+def _transport_security() -> TransportSecuritySettings:
+    """Allow this deployment's own hostname through DNS-rebinding protection.
+
+    FastMCP defaults to allowing localhost only, so on a public host every
+    Streamable HTTP request is rejected with 421 "Invalid Host header" and the
+    server is unreachable to any remote MCP client — which is most of the point
+    of deploying it. The protection stays ON; the deployment's own host is added
+    to the allowlist rather than the check being switched off.
+    """
+    allowed = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    origins = ["http://localhost:*", "http://127.0.0.1:*"]
+    public = urlparse(settings.public_base_url).netloc
+    if public and not public.startswith(("localhost", "127.0.0.1")):
+        allowed.append(public)
+        origins.append(f"https://{public}")
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed,
+        allowed_origins=origins,
+    )
+
 
 mcp = FastMCP(
     "x402-micropayments",
@@ -29,6 +55,7 @@ mcp = FastMCP(
         "build/verify seller payment configs, and upgrade to Pro via x402. "
         "Commerce meta included on every response."
     ),
+    transport_security=_transport_security(),
 )
 
 
@@ -92,6 +119,7 @@ async def pay_and_fetch(
     headers: dict[str, str] | None = None,
     body: str | None = None,
     preferred_network: str | None = None,
+    max_price_usdc: float | None = None,
     agent_id: str | None = None,
 ) -> str:
     """Pay via x402HttpxClient and fetch a protected HTTP resource."""
@@ -101,6 +129,7 @@ async def pay_and_fetch(
         headers=headers or {},
         body=body,
         preferred_network=preferred_network,
+        max_price_usdc=max_price_usdc,
     )
     return await _execute_tool(
         "pay_and_fetch", agent_id, lambda _: x402_services.pay_and_fetch(params)
@@ -114,15 +143,31 @@ async def build_seller_requirements(
     price: str = "$0.01",
     scheme: str = "exact",
     description: str = "Paid MCP-backed API access",
+    resource_url: str | None = None,
+    mime_type: str | None = "application/json",
+    discoverable: bool | None = None,
+    discovery_method: str = "GET",
+    discovery_input_example: dict | None = None,
+    discovery_output_example: dict | None = None,
     agent_id: str | None = None,
 ) -> str:
-    """Build seller-side x402 payment requirements via x402ResourceServer."""
+    """Build seller-side x402 payment requirements via x402ResourceServer.
+
+    Pass resource_url (plus optional discovery_* fields) to embed the Bazaar
+    discovery extension so a settled payment catalogs the endpoint.
+    """
     params = BuildSellerRequirementsInput(
         network=network,
         pay_to=pay_to,
         price=price,
         scheme=scheme,
         description=description,
+        resource_url=resource_url,
+        mime_type=mime_type,
+        discoverable=discoverable,
+        discovery_method=discovery_method,
+        discovery_input_example=discovery_input_example,
+        discovery_output_example=discovery_output_example,
     )
     return await _execute_tool(
         "build_seller_requirements",
@@ -219,6 +264,124 @@ async def purchase_tool_credits(
         agent_id,
         lambda resolved: x402_services.purchase_tool_credits(
             payment_signature, payment_required, resolved, pack
+        ),
+    )
+
+
+@mcp.tool()
+async def create_stripe_checkout(
+    purpose: str = "pro_tier_upgrade",
+    credits: int | None = None,
+    agent_id: str | None = None,
+) -> str:
+    """Create Stripe Checkout Session for pro tier or tool credits (fiat rail)."""
+    if purpose not in ("pro_tier_upgrade", "tool_credits"):
+        raise ValueError("purpose must be pro_tier_upgrade or tool_credits")
+
+    return await _execute_tool(
+        "create_stripe_checkout",
+        agent_id,
+        lambda resolved: _sync_result(
+            stripe_payments.create_checkout_session(
+                resolved,
+                purpose,  # type: ignore[arg-type]
+                credits=credits,
+            )
+        ),
+    )
+
+
+@mcp.tool()
+async def run_swarm_research(
+    topic: str,
+    max_price_usdc: float | None = None,
+    agent_id: str | None = None,
+    allow_paid_inputs: bool | None = None,
+) -> str:
+    """Run the swarm Agency: compose a research product and list it for resale.
+
+    Spends nothing by default — the report is synthesized from free inputs, so
+    unsold inventory costs nothing. Pass allow_paid_inputs=True to buy upstream
+    x402 services first (buy → compose → list), which books a cost basis before
+    knowing whether the composite will sell."""
+    # Checked before _execute_tool so a refusal does not burn a quota call.
+    if not settings.swarm_enabled:
+        return json.dumps(
+            {
+                "error": "SWARM_ENABLED is false; the buyer role is off on this "
+                "deployment.",
+                "data": None,
+                "meta": None,
+            },
+            indent=2,
+        )
+    return await _execute_tool(
+        "run_swarm_research",
+        agent_id,
+        lambda resolved: swarm_orchestrator.run_swarm_research(
+            topic, resolved, max_price_usdc, allow_paid_inputs
+        ),
+    )
+
+
+@mcp.tool()
+async def settle_composite_sale(
+    product_id: str,
+    payment_signature: str,
+    payment_required: str,
+    agent_id: str | None = None,
+) -> str:
+    """Verify + settle a buyer's x402 payment for a listed composite product and
+    record the realized revenue (sell side)."""
+    return await _execute_tool(
+        "settle_composite_sale",
+        agent_id,
+        lambda resolved: swarm_orchestrator.settle_composite_sale(
+            product_id, payment_signature, payment_required, resolved
+        ),
+    )
+
+
+@mcp.tool()
+async def swarm_revenue_report(agent_id: str | None = None) -> str:
+    """Portfolio revenue intelligence for the swarm: spend, revenue, LTV:CAC,
+    margins, per-source profit scores."""
+    from app.swarm import sovereign
+
+    return await _execute_tool(
+        "swarm_revenue_report",
+        agent_id,
+        lambda _: _sync_result(sovereign.build_revenue_report()),
+    )
+
+
+@mcp.tool()
+async def get_base_pulse(depth: int | None = None, agent_id: str | None = None) -> str:
+    """Live Base Network Pulse: synthesized settlement-conditions intelligence
+    (base fee, EIP-1559 projection, utilization trend, USD settlement cost, and a
+    settle-now/hold verdict) computed from real Base RPC data + ETH spot price."""
+    from app import pulse
+
+    return await _execute_tool(
+        "get_base_pulse", agent_id, lambda _: pulse.get_pulse(depth)
+    )
+
+
+@mcp.tool()
+async def get_os_metrics(
+    include_processes: bool = False, agent_id: str | None = None
+) -> str:
+    """Host OS telemetry: CPU, memory, swap, disk, network, and process
+    signals with an ok/warn/critical health verdict, sampled live from the
+    machine running the server. Optionally includes the top processes by
+    memory."""
+    from app import os_monitor
+
+    return await _execute_tool(
+        "get_os_metrics",
+        agent_id,
+        lambda _: _sync_result(
+            os_monitor.get_os_metrics(include_processes=include_processes)
         ),
     )
 

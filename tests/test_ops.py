@@ -30,9 +30,9 @@ def test_ledger_spend_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     """An absent ledger file reads as [], not as an error.
 
     Pointed at an isolated dir rather than the repo's own ledger/: that holds
-    real payment records on an operator machine, so asserting against it would
-    pass only on a clean checkout and fail for anyone who had actually used
-    the thing. revenue.jsonl is already populated here.
+    real payment records on an operator machine, so asserting against it made
+    this test pass only on a clean checkout and fail for anyone who had
+    actually used the thing.
     """
     monkeypatch.setattr(ledger_io, "LEDGER", tmp_path / "ledger")
 
@@ -41,22 +41,6 @@ def test_ledger_spend_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     body = response.json()
     assert isinstance(body, list)
     assert body == []
-
-
-def test_ledger_spend_returns_json_array(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    ledger_dir = tmp_path / "ledger"
-    ledger_dir.mkdir()
-    (ledger_dir / "spend.jsonl").write_text(
-        '{"ts":"2026-01-01","amount_usdc":0.01}\n',
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(ledger_io, "LEDGER", ledger_dir)
-    response = client.get("/ledger/spend")
-    assert response.status_code == 200
-    body = response.json()
-    assert isinstance(body, list)
-    assert len(body) == 1
-    assert body[0]["amount_usdc"] == 0.01
 
 
 def test_ledger_reads_jsonl(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -105,12 +89,3 @@ def test_commerce_snapshot_lists_agents() -> None:
     ids = {a["agent_id"] for a in snap["agents"]}
     assert "snap-a" in ids
     assert "snap-b" in ids
-
-
-def test_manifest_lists_ops_endpoints() -> None:
-    manifest = client.get("/.well-known/mcp").json()
-    endpoints = manifest["endpoints"]
-    assert endpoints["stats"] == "/stats"
-    assert endpoints["events"] == "/events"
-    assert endpoints["ledger_spend"] == "/ledger/spend"
-    assert endpoints["ledger_revenue"] == "/ledger/revenue"

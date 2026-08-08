@@ -1,6 +1,6 @@
-# x402 Agent Ops — Cost-Effective-to-Free Operating Group
+# x402-MCP Agent Ops — Cost-Effective-to-Free Operating Group
 
-Five Claude Code subagents that operate `x402` on a strict cost ladder: free tools first, cache second, testnet third, capped mainnet last, seller revenue offsetting spend.
+Five Claude Code subagents that operate `x402-mcp` on a strict cost ladder: free tools first, cache second, testnet third, capped mainnet last, seller + Stripe revenue offsetting spend.
 
 Agent definitions: `.claude/agents/`  
 Ledger policy: `ledger/policy.json`  
@@ -24,14 +24,14 @@ Copy `.mcp.json.example` → `.mcp.json` (git-ignored). Keep keys in `.env`, nev
 | `x402-archivist` | haiku | A | Cache layer. Never pay twice. |
 | `x402-warden` | sonnet | A | Budget policy. Approves/denies payments. |
 | `x402-treasurer` | sonnet | B | Sole `pay_and_fetch` executor. |
-| `x402-merchant` | sonnet | A | Revenue — x402 seller + pro/credits monetization. |
+| `x402-merchant` | sonnet | A | Revenue — x402 seller + Stripe checkout. |
 
 ## Cost Ladder
 
 1. **$0 keyless tools** — discover, probe, networks, verify (no wallet)
 2. **Cache-first** — archivist `ledger/cache/`
 3. **Capped mainnet** — warden enforces `ledger/policy.json` caps
-4. **Revenue offset** — merchant x402 seller flows; goal net ≥ 0
+4. **Revenue offset** — merchant + Stripe; goal net ≥ 0
 
 ## Ledger (`ledger/`)
 
@@ -56,5 +56,5 @@ Read-only ops endpoints for the dashboard handoff ([UI-HANDOFF.md](UI-HANDOFF.md
 ```
 task → scout → archivist (cache) → warden (APPROVE/DENY) → treasurer (vault)
      → archivist (store) → warden (ledger)
-merchant runs independently for revenue
+merchant / Stripe run independently for revenue
 ```

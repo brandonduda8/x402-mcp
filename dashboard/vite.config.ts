@@ -1,28 +1,21 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Backend target: use VITE_API_TARGET env or auto-detect WSL host.
-const apiTarget = process.env.VITE_API_TARGET || "http://localhost:8402";
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const apiTarget = env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8402";
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 5173,
-    proxy: {
-      "/stats": apiTarget,
-      "/events": apiTarget,
-      "/ledger": apiTarget,
-      "/doctor": apiTarget,
-      "/probe": apiTarget,
-      "/wallet": apiTarget,
-      "/health": apiTarget,
-      "/seller": apiTarget,
-      "/swarm": apiTarget,
+  return {
+    plugins: [react()],
+    server: {
+      port: 5173,
+      proxy: {
+        "/api": {
+          target: apiTarget,
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, ""),
+        },
+      },
     },
-  },
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./src/test-setup.ts"],
-  },
+  };
 });

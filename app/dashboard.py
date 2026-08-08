@@ -2,7 +2,9 @@
 
 Zero build step: inline CSS/JS, polls the live API (/health, /quota/{agent},
 /.well-known/mcp, /upgrade). Amber-on-ink Bloomberg-terminal lineage; block
-character meters; live event tape driven by real polling events.
+character meters and sparklines; live event tape driven by real polling events.
+Tier thresholds (rate limit, quota warning) come from the manifest, not
+hardcoded — the UI adapts when the agent upgrades to pro.
 """
 
 DASHBOARD_HTML = r"""<!DOCTYPE html>
@@ -10,6 +12,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>x402 terminal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,10 +50,14 @@ header{
 .lamp.ok{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2.4s infinite}
 .lamp.err{background:var(--red);box-shadow:0 0 8px var(--red)}
 @keyframes pulse{50%{opacity:.55}}
-@media (prefers-reduced-motion:reduce){.lamp.ok{animation:none}.tape-line{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.lamp.ok{animation:none}.tape-line{animation:none!important}body.offline main{transition:none}}
 .bar-item{color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
 .bar-item strong{color:var(--text);font-weight:500;text-transform:none;letter-spacing:0}
 #clock{margin-left:auto;color:var(--amber);font-size:12px;letter-spacing:.08em}
+
+/* offline: dim the board, keep the header readable */
+body.offline main{opacity:.45;transition:opacity .4s ease}
+body.offline #svc-status{color:var(--red)}
 
 /* ---- grid ---- */
 main{display:grid;gap:1px;background:var(--line);
@@ -58,24 +65,30 @@ main{display:grid;gap:1px;background:var(--line);
   grid-template-areas:
     "health health health health quota quota quota quota rev rev rev rev"
     "tools tools tools tools tools tools tools tools rev rev rev rev"
+    "store store store store store store store store store store store store"
+    "dist dist dist dist dist dist dist dist dist dist dist dist"
     "tape tape tape tape tape tape tape tape tape tape tape tape";
   border-bottom:1px solid var(--line);
 }
 @media (max-width:960px){
-  main{grid-template-columns:1fr;grid-template-areas:"health" "quota" "tools" "rev" "tape"}
+  main{grid-template-columns:1fr;grid-template-areas:"health" "quota" "tools" "rev" "store" "dist" "tape"}
 }
 section{background:var(--panel);padding:14px 18px 18px;min-width:0}
 #p-health{grid-area:health}#p-quota{grid-area:quota}
-#p-tools{grid-area:tools}#p-rev{grid-area:rev}#p-tape{grid-area:tape;background:var(--panel-2)}
+#p-tools{grid-area:tools}#p-rev{grid-area:rev}
+#p-store{grid-area:store}#p-dist{grid-area:dist}
+#p-tape{grid-area:tape;background:var(--panel-2)}
 h2{font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;
   color:var(--dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
 h2::after{content:"";flex:1;height:1px;background:var(--line)}
+h2 .count{color:var(--faint);letter-spacing:0;font-weight:400}
 
 /* ---- key/value rows ---- */
 .kv{display:grid;grid-template-columns:150px 1fr;gap:4px 14px;font-size:12.5px}
 .kv dt{color:var(--dim)}
 .kv dd{color:var(--text);overflow-wrap:anywhere}
 .kv dd.on{color:var(--green)} .kv dd.off{color:var(--red)}
+.spark{color:var(--amber);letter-spacing:1px;margin-right:8px}
 
 /* ---- quota meters ---- */
 .meter-label{display:flex;justify-content:space-between;color:var(--dim);
@@ -87,13 +100,14 @@ h2::after{content:"";flex:1;height:1px;background:var(--line)}
   padding:1px 8px;font-size:11px;letter-spacing:.14em;text-transform:uppercase}
 .tier-badge.pro{border-color:var(--green);color:var(--green)}
 .agent-row{display:flex;gap:8px;margin-bottom:6px}
-.agent-row input{flex:1;background:var(--ink);border:1px solid var(--line);
+.agent-row input,.agent-row select{flex:1;background:var(--ink);border:1px solid var(--line);
   padding:6px 10px;color:var(--text);min-width:0}
 .agent-row input::placeholder{color:var(--faint)}
 .agent-row button{background:var(--amber);border:none;color:var(--ink);
   font-weight:600;padding:6px 14px;cursor:pointer;letter-spacing:.06em}
 .agent-row button:hover{background:#ffc233}
 .hint{color:var(--faint);font-size:11.5px;margin-top:10px}
+.hint kbd{border:1px solid var(--line);padding:0 5px;font-size:10.5px;color:var(--dim)}
 
 /* ---- tools table ---- */
 table{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -101,14 +115,23 @@ th{color:var(--dim);font-weight:500;text-align:left;font-size:10.5px;
   letter-spacing:.14em;text-transform:uppercase;padding:4px 10px 6px 0;
   border-bottom:1px solid var(--line)}
 td{padding:5px 10px 5px 0;border-bottom:1px solid var(--panel-2);vertical-align:top}
+tbody tr:hover td{background:rgba(255,176,0,.05)}
 td.tool{color:var(--amber)}
 td.env{color:var(--dim);font-size:11.5px}
-td .req{color:var(--red)}
+td .req{display:inline-block;border:1px solid var(--line);color:var(--dim);
+  padding:0 6px;font-size:10.5px;letter-spacing:.06em;margin:0 6px 2px 0}
+td .req.on{border-color:var(--green);color:var(--green)}
+td .req.off{border-color:var(--red);color:var(--red)}
+td.ok{color:var(--green)} td.err{color:var(--red)}
+.chip{display:inline-block;border:1px solid var(--amber-dim);color:var(--amber);
+  padding:0 7px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase}
+.chip.pro{border-color:var(--green);color:var(--green)}
 
 /* ---- revenue panel ---- */
 .price{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:26px;color:#fff}
 .price small{font-size:12px;color:var(--dim);font-weight:500}
 .rev-block{border:1px solid var(--line);padding:10px 12px;margin-bottom:10px;background:var(--panel-2)}
+.rev-block.featured{border-color:var(--amber-dim)}
 .rev-block .name{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
 .rev-block ul{list-style:none;margin-top:6px;font-size:12px;color:var(--dim)}
 .rev-block li b{color:var(--text);font-weight:500}
@@ -120,6 +143,7 @@ td .req{color:var(--red)}
 .tape-line .t{color:var(--faint)}
 .tape-line .ok{color:var(--green)} .tape-line .err{color:var(--red)}
 .tape-line .msg{color:var(--dim)}
+#tape-paused{color:var(--amber);font-size:10px;letter-spacing:.14em;display:none}
 footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
 </style>
 </head>
@@ -129,6 +153,7 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
   <span class="bar-item"><span id="lamp" class="lamp"></span><strong id="svc-status">connecting…</strong></span>
   <span class="bar-item">facilitator <strong id="bar-facilitator">—</strong></span>
   <span class="bar-item">wallet <strong id="bar-wallet">—</strong></span>
+  <span class="bar-item">latency <strong id="bar-latency">—</strong></span>
   <span id="clock">—</span>
 </header>
 
@@ -143,6 +168,8 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
       <dt>default network</dt><dd id="h-network">—</dd>
       <dt>facilitator</dt><dd id="h-facilitator">—</dd>
       <dt>wallet key</dt><dd id="h-wallet">—</dd>
+      <dt>poll latency</dt><dd><span id="h-spark" class="spark" aria-hidden="true"></span><span id="h-latency">—</span></dd>
+      <dt>last poll</dt><dd id="h-lastpoll">—</dd>
       <dt>manifest</dt><dd><a href="/.well-known/mcp">/.well-known/mcp</a></dd>
     </dl>
   </section>
@@ -153,6 +180,10 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
       <input id="agent-input" placeholder="agent id" value="dashboard-agent" spellcheck="false" aria-label="Agent ID">
       <button id="agent-go" type="button">Query</button>
     </div>
+    <div class="agent-row">
+      <select id="agent-select" aria-label="Registered agent"><option value="">— pick a registered agent —</option></select>
+    </div>
+    <p class="hint" id="q-registered">Loading registered agents…</p>
     <dl class="kv">
       <dt>agent</dt><dd id="q-agent">—</dd>
       <dt>tier</dt><dd><span id="q-tier" class="tier-badge">—</span></dd>
@@ -163,11 +194,11 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
     <div class="meter" id="q-quota-meter" aria-hidden="true">░░░░░░░░░░░░░░░░░░░░░░░░</div>
     <div class="meter-label"><span>Rate limit / min</span><span id="q-rate-num">—</span></div>
     <div class="meter" id="q-rate-meter" aria-hidden="true">░░░░░░░░░░░░░░░░░░░░░░░░</div>
-    <p class="hint">Reads /quota/&lt;agent&gt; without consuming a call. Auto-refreshes every 5s.</p>
+    <p class="hint">Reads /quota/&lt;agent&gt; without consuming a call. Auto-refreshes every 5s. Press <kbd>/</kbd> to focus.</p>
   </section>
 
   <section id="p-tools">
-    <h2>Tool matrix</h2>
+    <h2>Tool matrix <span class="count" id="tools-count"></span></h2>
     <table>
       <thead><tr><th>Tool</th><th>Tier</th><th>Requires</th></tr></thead>
       <tbody id="tools-body"><tr><td class="env" colspan="3">Loading manifest…</td></tr></tbody>
@@ -176,7 +207,7 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
 
   <section id="p-rev">
     <h2>Revenue paths</h2>
-    <div class="rev-block">
+    <div class="rev-block featured">
       <div class="name">Pro tier</div>
       <div class="price" id="r-pro-price">—<small> / month · USDC via x402</small></div>
       <ul id="r-pro-list"></ul>
@@ -192,8 +223,39 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
     </div>
   </section>
 
+  <section id="p-store">
+    <h2>Storefront <span class="count" id="store-count"></span></h2>
+    <dl>
+      <dt>realized revenue</dt><dd id="s-revenue">—</dd>
+      <dt>from real buyers</dt><dd id="s-external">—</dd>
+      <dt>upstream spend</dt><dd id="s-spend">—</dd>
+      <dt>listings</dt><dd id="s-listed">—</dd>
+    </dl>
+    <table>
+      <thead><tr><th>Listing</th><th>Price</th><th>Earned</th></tr></thead>
+      <tbody id="store-body"><tr><td class="env" colspan="3">Loading listings…</td></tr></tbody>
+    </table>
+    <table>
+      <thead><tr><th>Settled sale</th><th>Amount</th><th>Payer</th><th>Tx</th></tr></thead>
+      <tbody id="sales-body"><tr><td class="env" colspan="4">Loading sales…</td></tr></tbody>
+    </table>
+    <table>
+      <thead><tr><th>Demand (402s served)</th><th>Views</th><th>Sold in window</th></tr></thead>
+      <tbody id="demand-body"><tr><td class="env" colspan="3">Loading demand…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section id="p-dist">
+    <h2>Distribution <span class="count" id="dist-count"></span></h2>
+    <table>
+      <thead><tr><th>Outreach thread</th><th>State</th><th>Updated</th></tr></thead>
+      <tbody id="dist-body"><tr><td class="env" colspan="3">Loading threads…</td></tr></tbody>
+    </table>
+    <p class="hint">Read from the public GitHub API, client-side. "closed" only means merged when the badge says so — some maintainers apply a PR by hand and leave it showing closed; open the thread to check.</p>
+  </section>
+
   <section id="p-tape">
-    <h2>Event tape</h2>
+    <h2>Event tape <span class="count" id="tape-count"></span> <span id="tape-paused">⏸ paused</span></h2>
     <div id="tape" role="log" aria-live="polite"></div>
   </section>
 </main>
@@ -201,36 +263,92 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
 
 <script>
 "use strict";
+/* __INJECT_TOKEN__ */
 const $ = (id) => document.getElementById(id);
 const BLOCKS = 24;
+const SPARK_CHARS = "▁▂▃▄▅▆▇█";
+const SPARK_LEN = 20;
 
-function tape(kind, msg){
+/* ---- event tape (pauses while hovered so lines can be read/copied) ---- */
+let tapeTotal = 0, tapePaused = false;
+const tapeBuffer = [];
+
+function tapeLine(kind, msg, ts){
   const line = document.createElement("div");
   line.className = "tape-line";
-  const t = new Date().toISOString().slice(11,19);
-  line.innerHTML = `<span class="t">${t}Z</span><span class="${kind}">${kind === "ok" ? "OK " : "ERR"}</span><span class="msg"></span>`;
+  line.innerHTML = `<span class="t">${ts}Z</span><span class="${kind}">${kind === "ok" ? "OK " : "ERR"}</span><span class="msg"></span>`;
   line.querySelector(".msg").textContent = msg;
   const el = $("tape");
   el.prepend(line);
   while (el.children.length > 60) el.removeChild(el.lastChild);
 }
 
-function meter(el, used, total){
-  const safeTotal = Math.max(total, 1);
-  const filled = Math.min(BLOCKS, Math.round((used / safeTotal) * BLOCKS));
-  el.innerHTML = "▓".repeat(filled) + `<span class="rest">${"░".repeat(BLOCKS - filled)}</span>`;
-  el.classList.toggle("hot", used / safeTotal >= 0.8);
+function tape(kind, msg){
+  tapeTotal += 1;
+  $("tape-count").textContent = `· ${tapeTotal}`;
+  const ts = new Date().toISOString().slice(11,19);
+  if (tapePaused){ tapeBuffer.push([kind, msg, ts]); return; }
+  tapeLine(kind, msg, ts);
 }
 
-async function getJSON(path){
-  const res = await fetch(path, {headers:{accept:"application/json"}});
+$("tape").addEventListener("mouseenter", () => {
+  tapePaused = true;
+  $("tape-paused").style.display = "inline";
+});
+$("tape").addEventListener("mouseleave", () => {
+  tapePaused = false;
+  $("tape-paused").style.display = "none";
+  while (tapeBuffer.length) tapeLine(...tapeBuffer.shift());
+});
+
+/* ---- block meters (half-step resolution via ▒) ---- */
+function meter(el, used, total, warnAt){
+  const safeTotal = Math.max(total, 1);
+  const exact = Math.min(1, used / safeTotal) * BLOCKS;
+  const filled = Math.floor(exact);
+  const half = exact - filled >= 0.5 && filled < BLOCKS ? 1 : 0;
+  el.innerHTML = "▓".repeat(filled) + "▒".repeat(half)
+    + `<span class="rest">${"░".repeat(BLOCKS - filled - half)}</span>`;
+  el.classList.toggle("hot", used / safeTotal >= (warnAt ?? 0.8));
+}
+
+/* ---- latency sparkline ---- */
+const latencies = [];
+function spark(ms){
+  latencies.push(ms);
+  if (latencies.length > SPARK_LEN) latencies.shift();
+  const max = Math.max(...latencies, 1);
+  $("h-spark").textContent = latencies
+    .map(v => SPARK_CHARS[Math.min(7, Math.round((v / max) * 7))]).join("");
+  $("h-latency").textContent = `${Math.round(ms)} ms`;
+  $("bar-latency").textContent = `${Math.round(ms)} ms`;
+}
+
+/* env requirement tags: painted live from /health config flags */
+let envStatus = {};
+function paintEnvTags(){
+  document.querySelectorAll("[data-env]").forEach(el => {
+    const ok = envStatus[el.dataset.env];
+    el.classList.toggle("on", ok === true);
+    el.classList.toggle("off", ok === false);
+    el.title = ok === true ? `${el.dataset.env} configured`
+      : ok === false ? `${el.dataset.env} not set — tool will error` : "";
+  });
+}
+
+async function getJSON(path, extra){
+  const hdrs = Object.assign({accept:"application/json"}, extra || {});
+  const res = await fetch(path, {headers:hdrs});
   if (!res.ok) throw new Error(`${path} → HTTP ${res.status}`);
   return res.json();
 }
 
 async function pollHealth(){
+  const t0 = performance.now();
   try{
     const h = await getJSON("/health");
+    spark(performance.now() - t0);
+    document.body.classList.remove("offline");
     $("lamp").className = "lamp ok";
     $("svc-status").textContent = h.status;
     $("h-service").textContent = h.service;
@@ -242,32 +360,184 @@ async function pollHealth(){
     $("h-wallet").textContent = w ? "configured" : "not configured (probe-only)";
     $("h-wallet").className = w ? "on" : "off";
     $("bar-wallet").textContent = w ? "armed" : "probe-only";
+    envStatus = {
+      EVM_PRIVATE_KEY: !!h.wallet_configured,
+      X402_PAY_TO_ADDRESS: !!h.pay_to_configured,
+    };
+    paintEnvTags();
+    $("h-lastpoll").textContent = new Date().toISOString().slice(11,19) + "Z";
     tape("ok", "health poll — service ok");
   }catch(e){
+    document.body.classList.add("offline");
     $("lamp").className = "lamp err";
     $("svc-status").textContent = "unreachable";
     tape("err", e.message);
   }
 }
 
+/* tier config from the manifest; per-tier limits drive the meters */
+let tiers = null;
+
 async function pollQuota(){
   const agent = $("agent-input").value.trim();
   if (!agent) return;
   try{
-    const {meta} = await getJSON(`/quota/${encodeURIComponent(agent)}`);
+    const authH = typeof __OP_TOKEN__ === "string" ? {authorization:"Bearer "+__OP_TOKEN__} : {};
+    const {meta} = await getJSON(`/quota/${encodeURIComponent(agent)}`, authH);
     $("q-agent").textContent = meta.agent_id;
     $("q-tier").textContent = meta.tier;
     $("q-tier").className = "tier-badge" + (meta.tier === "pro" ? " pro" : "");
     $("q-calls").textContent = meta.calls_this_month;
     $("q-credits").textContent = meta.tool_credits_remaining;
+    const tier = tiers?.[meta.tier];
+    const warnAt = tier?.quota_warning_threshold ?? 0.8;
     const total = meta.calls_this_month + meta.quota_remaining;
-    $("q-quota-num").textContent = `${meta.quota_remaining} left of ${total}`;
-    meter($("q-quota-meter"), meta.calls_this_month, total);
-    const rateTotal = window.__rateLimit || meta.rate_limit_remaining;
-    $("q-rate-num").textContent = `${meta.rate_limit_remaining} left`;
-    meter($("q-rate-meter"), rateTotal - meta.rate_limit_remaining, rateTotal);
+    $("q-quota-num").textContent = `${meta.quota_remaining} left of ${total} · ${Math.round((meta.calls_this_month / Math.max(total,1)) * 100)}% used`;
+    meter($("q-quota-meter"), meta.calls_this_month, total, warnAt);
+    const rateTotal = tier?.rate_limit_per_minute ?? meta.rate_limit_remaining;
+    $("q-rate-num").textContent = `${meta.rate_limit_remaining} left of ${rateTotal}`;
+    meter($("q-rate-meter"), rateTotal - meta.rate_limit_remaining, rateTotal, warnAt);
     tape("ok", `quota poll — ${meta.agent_id}: ${meta.quota_remaining} calls left (${meta.tier})`);
   }catch(e){ tape("err", e.message); }
+}
+
+/* ---- registered agents: proves the tier system is live even while every
+   agent sits at 0 calls (quota lookups never consume a call, so nothing
+   here moves on its own — this just shows real ids exist to query). */
+async function loadRegisteredAgents(){
+  try{
+    const {agents} = await getJSON("/stats");
+    const active = agents.filter(a => a.calls_this_month > 0).length;
+    $("q-registered").textContent = active > 0
+      ? `${agents.length} registered agents · ${active} with calls this month`
+      : `${agents.length} registered agents · all free tier · 0 calls so far (tier system is live, just not yet consumed)`;
+    const sel = $("agent-select");
+    const current = sel.value;
+    sel.innerHTML = '<option value="">— pick a registered agent —</option>';
+    agents.forEach(a => {
+      const opt = document.createElement("option");
+      opt.value = a.agent_id;
+      opt.textContent = `${a.agent_id}  (${a.tier}, ${a.calls_this_month} calls)`;
+      sel.appendChild(opt);
+    });
+    sel.value = current;
+    tape("ok", `stats poll — ${agents.length} registered agents`);
+  }catch(e){
+    $("q-registered").textContent = "Could not load registered agents.";
+    tape("err", e.message);
+  }
+}
+
+/* ---- storefront: what is listed, and what has actually been paid ----
+   Polled far slower than health/quota on purpose. These three endpoints read
+   the ledgers and registry, which are Redis-backed in production on a plan
+   with a monthly command budget — a tab left open all day at the 5s cadence
+   would eat a meaningful share of it. Skipped entirely while the tab is
+   hidden, for the same reason. */
+const usd = (n) => "$" + Number(n || 0).toFixed(Math.abs(Number(n)) < 0.01 ? 6 : 2);
+
+async function pollStore(){
+  if (document.hidden) return;
+  try{
+    const [products, report, sales, demand] = await Promise.all([
+      getJSON("/swarm/products"),
+      getJSON("/swarm/revenue"),
+      getJSON("/ledger/revenue"),
+      getJSON("/demand"),
+    ]);
+
+    $("s-revenue").textContent = usd(report.total_revenue_usdc);
+    /* is_operator_settle: true = the operator paying itself (cataloging,
+       re-indexing) — not demand. false = a different wallet paid — a real
+       sale. null/undefined = payer unknown (row predates this field, or no
+       OPERATOR_WALLETS configured) — counted as neither, not assumed real. */
+    const externalUsdc = sales
+      .filter(s => s.is_operator_settle === false)
+      .reduce((sum, s) => sum + Number(s.amount_usdc || 0), 0);
+    $("s-external").textContent = usd(externalUsdc);
+    $("s-spend").textContent = usd(report.total_spend_usdc);
+    $("s-listed").textContent = `${report.listed_count} listed · ${report.sold_count} sold`;
+    $("store-count").textContent = `· ${products.length}`;
+
+    $("store-body").innerHTML = products.length ? products.map(p => `
+      <tr>
+        <td class="tool" title="${p.product_id}">${p.topic}</td>
+        <td>${usd(p.price_usdc)}</td>
+        <td>${p.revenue_usdc ? usd(p.revenue_usdc) : "—"}</td>
+      </tr>`).join("") : `<tr><td class="env" colspan="3">nothing listed</td></tr>`;
+
+    const payerBadge = (s) => s.is_operator_settle === true
+      ? `<span class="env">self-settle</span>`
+      : s.is_operator_settle === false
+        ? `<span class="ok">external ✓</span>`
+        : `<span class="env">—</span>`;
+
+    $("sales-body").innerHTML = sales.length ? sales.slice(0, 8).map(s => `
+      <tr>
+        <td class="tool">${s.ts.slice(0, 19).replace("T", " ")} · ${s.product_id || "—"}</td>
+        <td>${usd(s.amount_usdc)}</td>
+        <td>${payerBadge(s)}</td>
+        <td class="env">${s.tx ? s.tx.slice(0, 10) + "…" : "—"}</td>
+      </tr>`).join("") : `<tr><td class="env" colspan="4">no settled sales yet</td></tr>`;
+
+    /* Views with no sales is a price/product signal; zero views is a discovery
+       signal. Showing both stops those two being read as the same thing. */
+    const d = demand.resources || [];
+    $("demand-body").innerHTML = d.length ? d.map(r => `
+      <tr>
+        <td class="tool">${r.resource}</td>
+        <td>${r.challenges_served}</td>
+        <td>${r.sales_in_window}${r.conversion === null ? "" : ` <span class="env">(${(r.conversion*100).toFixed(1)}%)</span>`}</td>
+      </tr>`).join("") : `<tr><td class="env" colspan="3">no 402s served yet</td></tr>`;
+  }catch(e){ tape("err", e.message); }
+}
+
+/* ---- distribution: outreach PR/issue threads on OTHER repos, read straight
+   from the public GitHub REST API (CORS-open for public data, no token
+   needed). Keep this list in sync with .github/workflows/thread-watch.yml's
+   THREADS env — that workflow alerts on new activity, this just shows
+   current state. Renders only structured fields (state/comments/date) via
+   textContent, never a fetched title or comment body, so third-party repo
+   content can't inject markup into this page. */
+const OUTREACH_THREADS = [
+  {repo: "BankrBot/skills", num: 588, label: "BankrBot/skills PR #588"},
+  {repo: "Haustorium12/gold-402", num: 58, label: "gold-402 PR #58"},
+];
+
+async function loadDistribution(){
+  if (document.hidden) return;
+  const rows = await Promise.all(OUTREACH_THREADS.map(async (t) => {
+    try{
+      const pr = await getJSON(`https://api.github.com/repos/${t.repo}/pulls/${t.num}`);
+      const state = pr.merged ? "merged" : pr.state === "open" ? "open" : "closed";
+      return {...t, state, comments: pr.comments ?? 0, updated: pr.updated_at, url: pr.html_url};
+    }catch(e){
+      return {...t, state: "error", comments: 0, updated: null, url: null};
+    }
+  }));
+  $("dist-count").textContent = `· ${rows.length}`;
+  const body = $("dist-body");
+  body.innerHTML = "";
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    const tdLabel = document.createElement("td");
+    const tdState = document.createElement("td");
+    const tdUpdated = document.createElement("td");
+    tdUpdated.className = "env";
+    const a = document.createElement("a");
+    a.textContent = r.label;
+    if (r.url){ a.href = r.url; a.target = "_blank"; a.rel = "noopener"; }
+    tdLabel.appendChild(a);
+    tdState.className = r.state === "merged" ? "ok" : r.state === "open" ? "tool"
+      : r.state === "error" ? "err" : "env";
+    tdState.textContent = r.state === "closed"
+      ? `closed · ${r.comments} comment${r.comments === 1 ? "" : "s"}`
+      : r.state;
+    tdUpdated.textContent = r.updated ? r.updated.slice(0, 10) : "—";
+    tr.append(tdLabel, tdState, tdUpdated);
+    body.appendChild(tr);
+  });
+  tape("ok", `distribution poll — ${rows.length} outreach threads checked`);
 }
 
 async function loadManifest(){
@@ -276,14 +546,16 @@ async function loadManifest(){
     $("h-transport").textContent = m.transport.join(" · ");
     $("h-protocol").textContent = `x402 ${m.x402.protocol_version}`;
     $("h-network").textContent = m.x402.default_network;
+    $("tools-count").textContent = `· ${m.tools.length}`;
     $("tools-body").innerHTML = m.tools.map(t => `
       <tr>
         <td class="tool">${t.name}</td>
-        <td>${t.tier}</td>
-        <td class="env">${t.requires_env ? `<span class="req">env</span> ${t.requires_env.join(", ")}` : "—"}</td>
+        <td><span class="chip${t.tier === "pro" ? " pro" : ""}">${t.tier}</span></td>
+        <td class="env">${t.requires_env ? t.requires_env.map(v => `<span class="req" data-env="${v}">env ${v}</span>`).join("") : "—"}</td>
       </tr>`).join("");
+    paintEnvTags();
+    tiers = m.tiers;
     const free = m.tiers.free, pro = m.tiers.pro;
-    window.__rateLimit = free.rate_limit_per_minute;
     $("r-pro-price").firstChild.textContent = pro.price_x402;
     $("r-pro-list").innerHTML =
       `<li><b>${pro.monthly_quota.toLocaleString()}</b> calls / month</li>` +
@@ -304,7 +576,7 @@ async function loadUpgrade(){
     $("r-credit-price").firstChild.textContent = tc.pack_price;
     $("r-credit-list").innerHTML =
       `<li><b>${tc.pack_size}</b> credits per pack</li>` +
-      `<li>tools: <b>${tc.payment_tool} → ${tc.purchase_tool}</b></li>`;
+      `<li>tools: <b>${tc.x402_payment_tool} → ${tc.x402_purchase_tool}</b></li>`;
   }catch(e){ tape("err", e.message); }
 }
 
@@ -314,11 +586,27 @@ function tick(){
 
 $("agent-go").addEventListener("click", pollQuota);
 $("agent-input").addEventListener("keydown", (e) => { if (e.key === "Enter") pollQuota(); });
+$("agent-select").addEventListener("change", (e) => {
+  if (!e.target.value) return;
+  $("agent-input").value = e.target.value;
+  pollQuota();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && document.activeElement !== $("agent-input")){
+    e.preventDefault();
+    $("agent-input").focus();
+    $("agent-input").select();
+  }
+});
 
 tick(); setInterval(tick, 1000);
-loadManifest(); loadUpgrade(); pollHealth(); pollQuota();
+(async () => { await loadManifest(); loadUpgrade(); pollHealth(); pollQuota(); pollStore(); loadDistribution(); loadRegisteredAgents(); })();
 setInterval(pollHealth, 5000);
 setInterval(pollQuota, 5000);
+setInterval(pollStore, 30000);
+setInterval(loadDistribution, 60000);
+setInterval(loadRegisteredAgents, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { pollStore(); loadDistribution(); loadRegisteredAgents(); } });
 </script>
 </body>
 </html>
