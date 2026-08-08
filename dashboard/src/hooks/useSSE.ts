@@ -19,7 +19,8 @@ export function useSSE(enabled: boolean, onEvent: (e: StreamEvent) => void) {
   const connect = useCallback(() => {
     if (!enabled) return;
     esRef.current?.close();
-    const es = new EventSource("/api/events");
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || "";
+    const es = new EventSource(`${baseUrl}/events`);
     esRef.current = es;
     es.onopen = () => {
       reconnectAttemptRef.current = 0;
