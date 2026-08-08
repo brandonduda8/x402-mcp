@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { LiquidCanvasEffect } from "./LiquidCanvasEffect";
 
 export function ParallaxProtocolHero() {
   const [scrollY, setScrollY] = useState(0);
@@ -32,6 +33,8 @@ export function ParallaxProtocolHero() {
         color: "#F3F4F6",
       }}
     >
+      {/* Dynamic Fluid Liquid Canvas Canvas Layer */}
+      <LiquidCanvasEffect />
       {/* Background Layer 1: Animated Grid with Parallax Offset */}
       <div
         style={{
