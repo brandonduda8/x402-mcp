@@ -20,6 +20,10 @@ import { MissionProgress } from "./components/MissionProgress";
 import { SellerWizard } from "./components/SellerWizard";
 import { CommandPalette } from "./components/CommandPalette";
 import { ParallaxProtocolHero } from "./components/ParallaxProtocolHero";
+import { FoundationTicker } from "./components/FoundationTicker";
+import { ChainDistributionBar } from "./components/ChainDistributionBar";
+import { FacilitatorLeaderboard } from "./components/FacilitatorLeaderboard";
+import { BazaarResourceExplorer } from "./components/BazaarResourceExplorer";
 
 function loadPersisted<T>(key: string, fallback: T): T {
   try {
@@ -139,13 +143,17 @@ export default function App() {
         </div>
       )}
 
+      <div style={{ padding: "0 24px" }}>
+        <FoundationTicker />
+      </div>
+
       {/* 12-col grid layout */}
       <main
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(12, 1fr)",
           gap: "16px",
-          padding: "16px 24px",
+          padding: "0 24px 16px 24px",
           flex: 1,
           overflow: "auto",
           alignContent: "start",
@@ -154,6 +162,7 @@ export default function App() {
         <div style={{ gridColumn: "span 12" }}>
           <ParallaxProtocolHero />
         </div>
+
         {/* Row 1: Stats */}
         <NetPosition
           spend={spend}
@@ -163,6 +172,13 @@ export default function App() {
         />
         <QuotaGauge agents={agents} quota={quota} density={density} />
         <RateSparkline events={allEvents} rateLimit={rateLimit} density={density} />
+
+        {/* Ecosystem Settlement Pulse & Chain Distribution */}
+        <ChainDistributionBar density={density} />
+
+        {/* Bazaar Resource Explorer & Facilitator Leaderboard */}
+        <BazaarResourceExplorer density={density} />
+        <FacilitatorLeaderboard density={density} />
 
         {/* Row 2: Activity + Agent lanes */}
         <ActivityStream events={allEvents} density={density} />
