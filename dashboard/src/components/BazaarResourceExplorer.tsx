@@ -64,6 +64,9 @@ export function BazaarResourceExplorer({ density }: { density: string }) {
   const handleSimulateProbe = () => {
     setProbing(true);
     setProbeResult(null);
+    const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:8402";
+    const fullUrl = `${origin}${selectedProduct.endpoint}`;
+
     setTimeout(() => {
       setProbing(false);
       setProbeResult(
@@ -81,6 +84,7 @@ export function BazaarResourceExplorer({ density }: { density: string }) {
               price_usdc: selectedProduct.priceUsdc,
               network: selectedProduct.network,
               pay_to: selectedProduct.seller,
+              resource_url: fullUrl,
               instructions: "Pay via x402 and retry with PAYMENT-SIGNATURE header.",
             },
           },
