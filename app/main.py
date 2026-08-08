@@ -21,6 +21,9 @@ from app.manifest import build_mcp_manifest
 from app.mcp_server import mcp
 from app.ops_events import event_stream, format_sse
 
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
 log = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -28,6 +31,10 @@ app = FastAPI(
     description="MCP server for x402 HTTP micropayments with agent-commerce overlay",
     version="0.1.0",
 )
+
+dist_assets = Path("dashboard/dist/assets")
+if dist_assets.exists():
+    app.mount("/assets", StaticFiles(directory=str(dist_assets)), name="assets")
 
 def _cors_origins() -> list[str]:
     """Local Vite dev origins, plus any EXACT origins the operator opted into.
