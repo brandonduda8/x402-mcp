@@ -17,6 +17,7 @@ export default defineConfig({
       "/wallet": apiTarget,
       "/health": apiTarget,
       "/seller": apiTarget,
+      "/swarm": apiTarget,
     },
   },
   test: {

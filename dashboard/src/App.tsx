@@ -19,6 +19,7 @@ import { WalletPanel } from "./components/WalletPanel";
 import { MissionProgress } from "./components/MissionProgress";
 import { SellerWizard } from "./components/SellerWizard";
 import { CommandPalette } from "./components/CommandPalette";
+import { ParallaxProtocolHero } from "./components/ParallaxProtocolHero";
 
 function loadPersisted<T>(key: string, fallback: T): T {
   try {
@@ -150,6 +151,9 @@ export default function App() {
           alignContent: "start",
         }}
       >
+        <div style={{ gridColumn: "span 12" }}>
+          <ParallaxProtocolHero />
+        </div>
         {/* Row 1: Stats */}
         <NetPosition
           spend={spend}
