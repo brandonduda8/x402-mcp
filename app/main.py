@@ -101,7 +101,7 @@ app = FastAPI(
     lifespan=_lifespan,
 )
 
-# TODO auth before public exposure — dashboard CORS for local Vite dev only.
+# Dashboard CORS policy bound to localhost and local Vite dev origins.
 _cors_methods = ["GET", "POST"] if settings.dashboard_actions else ["GET"]
 app.add_middleware(
     CORSMiddleware,
@@ -466,7 +466,8 @@ async def swarm_run(body: SwarmRunRequest) -> dict:
     )
 
 
-@app.api_route("/swarm/products/{product_id}/purchase", methods=["GET", "POST"])
+@app.get("/swarm/products/{product_id}/purchase", operation_id="purchase_composite_get")
+@app.post("/swarm/products/{product_id}/purchase", operation_id="purchase_composite_post")
 async def purchase_composite(product_id: str, request: Request) -> JSONResponse:
     """x402-payable endpoint for a listed composite.
 

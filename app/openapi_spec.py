@@ -323,6 +323,7 @@ def tighten(schema: dict[str, Any]) -> dict[str, Any]:
             if "/sample" in path:
                 continue
             concrete_city: dict[str, Any] = {}
+            city_code = path.split("/")[2]
             for method, operation in city_ops.items():
                 if method != "get" or not isinstance(operation, dict):
                     continue
@@ -333,6 +334,7 @@ def tighten(schema: dict[str, Any]) -> dict[str, Any]:
                     for p in resolved.get("parameters", [])
                     if p.get("name") != "city_code"
                 ]
+                resolved["operationId"] = f"us_{city_code}_property_check_get"
                 _declare_paid(resolved, amount, examples.get(path))
                 concrete_city[method] = resolved
             if concrete_city:

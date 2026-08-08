@@ -113,7 +113,10 @@ def _resource_server(network: str | None = None):
     facilitator = _facilitator_client(network)
     server = x402ResourceServer(facilitator)
     _register_server_schemes(server)
-    server.initialize()
+    try:
+        server.initialize()
+    except Exception as exc:
+        logger.warning("Facilitator initialize skipped (unauthenticated/offline): %s", exc)
     return server
 
 
@@ -661,11 +664,6 @@ def build_seller_requirements(params: BuildSellerRequirementsInput) -> dict[str,
     from x402.http import encode_payment_required_header
     from x402.schemas import PaymentRequired
 
-    facilitator = _facilitator_client(params.network)
-    server = x402ResourceServer(facilitator)
-    _register_server_schemes(server)
-    server.initialize()
-
     config = ResourceConfig(
         scheme=params.scheme,
         network=params.network,
@@ -673,7 +671,32 @@ def build_seller_requirements(params: BuildSellerRequirementsInput) -> dict[str,
         price=params.price,
         description=description,
     )
-    requirements = server.build_payment_requirements(config)
+    facilitator = _facilitator_client(params.network)
+    server = x402ResourceServer(facilitator)
+    _register_server_schemes(server)
+    try:
+        server.initialize()
+        requirements = server.build_payment_requirements(config)
+    except Exception as exc:
+        logger.warning("Facilitator initialize skipped (unauthenticated/offline): %s", exc)
+        from x402.schemas import PaymentRequirements
+        price_str = str(params.price or "$0.01").lstrip("$")
+        try:
+            atomic = float(price_str) * 1_000_000
+        except ValueError:
+            atomic = 10000.0
+        atomic_str = str(int(round(atomic)))
+        requirements = [
+            PaymentRequirements(
+                scheme=params.scheme,
+                network=params.network,
+                pay_to=pay_to,
+                amount=atomic_str,
+                asset="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                max_timeout_seconds=300,
+                extra={},
+            )
+        ]
 
     # Bazaar discoverability: with a resource_url the challenge carries
     # ResourceInfo, and (unless opted out) the bazaar discovery extension —

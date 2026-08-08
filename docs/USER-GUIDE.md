@@ -99,7 +99,7 @@ Throughout this guide, `PY` means the venv interpreter: `.venv\Scripts\python.ex
 `.env.example` lists every knob; for a first local run you only need one line to be non-empty. Open `.env` and set:
 
 ```env
-X402_PAY_TO_ADDRESS=<YOUR_WALLET>
+X402_PAY_TO_ADDRESS=0x0000000000000000000000000000000000000000  # (Your EIP-55 EVM Receive Address)
 ```
 
 That is your **receive** address — every x402 sale settles there. It can be any EVM address you control; nothing is spent by setting it. Leave the rest of `.env.example` as shipped. In particular:

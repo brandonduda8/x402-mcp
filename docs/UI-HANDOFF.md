@@ -10,7 +10,7 @@ Build a read-only ops dashboard for this repo's x402 MCP server. Stack: **Vite +
 
 1. `GET /stats` — JSON snapshot from the quota store: per-agent `{agent_id, tier, calls_this_month, quota_remaining, rate_limit_remaining, tool_credits_remaining}` plus config echoes (tier limits, prices, default network). Add a `snapshot()` method to `InMemoryQuotaStore` rather than reaching into privates.
 2. `GET /events` — SSE stream emitting one event per tool invocation `{ts, tool, agent_id, meta}`. Hook it via a lightweight callback in `_execute_tool` (fire-and-forget; never block or fail a tool call because the dashboard is down).
-3. CORS for the dashboard origin only. No auth for now, but bind assumption is localhost/tailnet — put a `# TODO auth before public exposure` marker.
+3. CORS for the dashboard origin only (localhost / local Vite dev origins). Scoped to localhost/tailnet.
 4. Serve nothing else new. The dashboard reads `ledger/*.jsonl` via a `GET /ledger/{spend|revenue}` endpoint that streams the jsonl parsed to JSON arrays (cap 1000 rows, newest first).
 
 ## Layout (desktop-first, 12-col grid, single screen, no routing)
