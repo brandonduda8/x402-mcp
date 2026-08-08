@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type DoctorCheck, type LedgerRow, type OsSnapshot, type PulseResponse, type StatsResponse, type SwarmProduct, type SwarmRevenue, type WalletResponse } from "./api/client";
+import { ActiveStorefront } from "./components/ActiveStorefront";
 import { CommandPalette } from "./components/CommandPalette";
 import { OsHealthPanel } from "./components/OsHealthPanel";
 import { PulsePanel } from "./components/PulsePanel";
@@ -309,48 +310,73 @@ export default function App() {
 
       <header
         className="panel"
-        style={{ margin: 16, display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}
+        style={{
+          margin: 16,
+          display: "flex",
+          gap: 16,
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          padding: "14px 24px",
+          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(6, 9, 14, 0.9) 100%)",
+        }}
       >
-        <strong>x402 // mission control</strong>
-        <span className="mono" style={{ color: "var(--base)" }}>
-          {stats?.config.network ?? "—"}
-        </span>
-        <span aria-label={`Connection ${liveLabel}`}>
-          <span style={{ color: liveColor }}>●</span> {liveLabel}
-        </span>
-        <label>
-          <input
-            type="checkbox"
-            aria-label="Demo"
-            checked={demo}
-            onChange={(e) => setDemo(e.target.checked)}
-          />{" "}
-          Demo
-        </label>
-        <select
-          value={density}
-          onChange={(e) => setDensity(e.target.value as Density)}
-          aria-label="Density mode"
-        >
-          <option value="guided">Guided</option>
-          <option value="standard">Standard</option>
-          <option value="operator">Operator</option>
-        </select>
-        <button type="button" onClick={() => setWizardOpen(true)}>
-          Setup wizard
-        </button>
-        <button type="button" onClick={() => setSellerOpen(true)}>
-          Sell something
-        </button>
-        <button type="button" onClick={() => setPaletteOpen(true)}>
-          ⌘K
-        </button>
-        <button type="button" onClick={() => setMissionOpen((v) => !v)}>
-          Mission
-        </button>
-        <button type="button" onClick={() => setTourOpen(true)}>
-          Show me around
-        </button>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <strong style={{ fontFamily: "var(--font-heading)", fontSize: 18, letterSpacing: "-0.02em", color: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: "var(--neon-cyan)" }}>x402</span> // mission control
+          </strong>
+          <span className="mono" style={{ color: "var(--base)", background: "rgba(0, 82, 255, 0.12)", padding: "3px 10px", borderRadius: 6, fontSize: 12, border: "1px solid rgba(0, 82, 255, 0.3)" }}>
+            {stats?.config.network ?? "—"}
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, background: "rgba(0,0,0,0.3)", padding: "4px 12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)" }}>
+            <span className="ping-indicator" style={{ background: liveColor }} />
+            <span style={{ color: liveColor, fontWeight: 600 }}>{liveLabel}</span>
+          </span>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ fontSize: 13, color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="checkbox"
+              aria-label="Demo"
+              checked={demo}
+              onChange={(e) => setDemo(e.target.checked)}
+            />{" "}
+            Demo
+          </label>
+          <select
+            value={density}
+            onChange={(e) => setDensity(e.target.value as Density)}
+            aria-label="Density mode"
+            style={{
+              background: "rgba(0,0,0,0.4)",
+              color: "var(--text)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 6,
+              padding: "5px 10px",
+              fontSize: 12,
+            }}
+          >
+            <option value="guided">Guided</option>
+            <option value="standard">Standard</option>
+            <option value="operator">Operator</option>
+          </select>
+          <button type="button" onClick={() => setWizardOpen(true)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            Setup wizard
+          </button>
+          <button type="button" onClick={() => setSellerOpen(true)} style={{ background: "linear-gradient(135deg, var(--neon-cyan), var(--base))", border: "none", color: "#000", fontWeight: 700, padding: "6px 16px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            Sell something
+          </button>
+          <button type="button" onClick={() => setPaletteOpen(true)} className="mono" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text-muted)", padding: "6px 12px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            ⌘K
+          </button>
+          <button type="button" onClick={() => setMissionOpen((v) => !v)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            Mission
+          </button>
+          <button type="button" onClick={() => setTourOpen(true)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            Show me around
+          </button>
+        </div>
       </header>
 
       <MissionProgress steps={missionSteps} open={missionOpen} onToggle={() => setMissionOpen((v) => !v)} />
@@ -400,6 +426,8 @@ export default function App() {
       )}
 
       <main className="grid-12">
+        <ActiveStorefront products={products} revenueRows={revenue} activityEvents={activity} />
+
         <section id="panel-hero" className="panel" style={{ gridColumn: "span 3" }}>
           <h3>
             {density === "guided" ? "Money left after costs" : "Net position"}
