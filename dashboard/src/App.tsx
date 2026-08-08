@@ -21,6 +21,12 @@ import { deriveMissionSteps } from "./utils/mission";
 import { formatUsdcAtomic } from "./utils/usdc";
 import { relativeTime } from "./utils/time";
 
+import { ParallaxProtocolHero } from "./components/ParallaxProtocolHero";
+import { FoundationTicker } from "./components/FoundationTicker";
+import { ChainDistributionBar } from "./components/ChainDistributionBar";
+import { FacilitatorLeaderboard } from "./components/FacilitatorLeaderboard";
+import { BazaarResourceExplorer } from "./components/BazaarResourceExplorer";
+
 type Density = "guided" | "standard" | "operator";
 
 function EmptyPanel({ title, action, command }: { title: string; action: string; command?: string }) {
@@ -334,7 +340,41 @@ export default function App() {
           </span>
         </div>
 
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Prominent Operating Mode Indicator Badge */}
+          <div
+            onClick={() => setDemo((d) => !d)}
+            title={
+              demo
+                ? "Currently in Public Ecosystem Showcase Mode. Click to switch to Private Operator Terminal."
+                : "Currently in Private Operator Terminal Mode. Click to switch to Public Ecosystem Showcase."
+            }
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 12px",
+              borderRadius: 20,
+              background: demo ? "rgba(245, 158, 11, 0.15)" : "rgba(0, 240, 255, 0.15)",
+              border: demo ? "1px solid rgba(245, 158, 11, 0.4)" : "1px solid rgba(0, 240, 255, 0.4)",
+              cursor: "pointer",
+              fontSize: 11,
+              fontFamily: "var(--font-mono, monospace)",
+              fontWeight: 600,
+              color: demo ? "#F59E0B" : "#00F0FF",
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: demo ? "#F59E0B" : "#00F0FF",
+                boxShadow: demo ? "0 0 8px #F59E0B" : "0 0 8px #00F0FF",
+              }}
+            />
+            {demo ? "🌐 Public Ecosystem Showcase" : "🛡️ Private Operator Terminal"}
+          </div>
+
           <label style={{ fontSize: 13, color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
             <input
               type="checkbox"
@@ -425,7 +465,19 @@ export default function App() {
         </div>
       )}
 
+      <div style={{ padding: "0 16px" }}>
+        <FoundationTicker />
+      </div>
+
       <main className="grid-12">
+        <div style={{ gridColumn: "span 12" }}>
+          <ParallaxProtocolHero />
+        </div>
+
+        <ChainDistributionBar density={density} />
+        <BazaarResourceExplorer density={density} />
+        <FacilitatorLeaderboard density={density} />
+
         <ActiveStorefront products={products} revenueRows={revenue} activityEvents={activity} />
 
         <section id="panel-hero" className="panel" style={{ gridColumn: "span 3" }}>

@@ -157,6 +157,16 @@ pytest -v
 
 See [docs/SETUP.md](docs/SETUP.md#step-7--test-without-surprises) for expected vs unexpected errors (wallet tools fail clearly until `.env` is configured).
 
+## Mission Control Dashboard
+
+Fintech-terminal ops dashboard at `http://localhost:5173`. Net position, quota gauge, rate sparkline, activity stream, agent lanes, spend/revenue ledgers (with BaseScan links), 402 Inspector, wallet panel, first-run wizard, and mission progress tracker. Three density modes (Guided/Standard/Operator). `cmd+K` command palette.
+
+API surface: `GET /stats`, `GET /events` (SSE with 15s heartbeat), `GET /ledger/{spend|revenue}`, `GET /doctor`, `GET /probe`, `GET /wallet`, `POST /seller/requirements`.
+
+## Agent Ops
+
+Cost-effective multi-agent operating group (scout, warden, treasurer, archivist, merchant) with budget policy and ledger. See [docs/agent-ops.md](docs/agent-ops.md).
+
 ## Docker
 
 ```bash
