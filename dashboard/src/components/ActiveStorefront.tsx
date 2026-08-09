@@ -128,7 +128,7 @@ export function ActiveStorefront({
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span className="pulsing-dot" style={{ width: 12, height: 12, background: "var(--neon-cyan)" }} />
             <h2 style={{ margin: 0, fontSize: 24, color: "#fff", fontFamily: "var(--font-heading)" }}>
-              🔥 PRIMARY FOCAL POINT: LIVE x402 CALLS UP FOR SALE
+              🔥 LIVE x402 CALLS UP FOR SALE
             </h2>
           </div>
           <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: 14 }}>

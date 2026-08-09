@@ -26,6 +26,7 @@ import { FoundationTicker } from "./components/FoundationTicker";
 import { ChainDistributionBar } from "./components/ChainDistributionBar";
 import { FacilitatorLeaderboard } from "./components/FacilitatorLeaderboard";
 import { BazaarResourceExplorer } from "./components/BazaarResourceExplorer";
+import { Bubble } from "./components/canvasui/Bubble";
 
 type Density = "guided" | "standard" | "operator";
 
@@ -284,8 +285,26 @@ export default function App() {
   };
 
   return (
-    <div>
-      {demo && (
+    <Bubble
+      size={30}
+      trail={24}
+      follow={0.5}
+      blend={14}
+      speed={2}
+      refraction={80}
+      dispersion={1}
+      frost={0}
+      shine={0.25}
+      rim={0.5}
+      iridescence={1}
+      intensity={0.9}
+      tintStrength={0}
+      tint={[1, 1, 1]}
+      colorA={[0.2902, 0.4549, 0.7216]}
+      colorB={[0.4118, 0.4118, 0.4157]}
+    >
+      <div>
+        {demo && (
         <div style={{ background: "var(--amber)", color: "#000", textAlign: "center", padding: 4, fontWeight: 600 }}>
           DEMO — sample data
         </div>
@@ -671,5 +690,6 @@ export default function App() {
         </footer>
       )}
     </div>
+    </Bubble>
   );
 }
