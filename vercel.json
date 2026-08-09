@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd dashboard && pnpm install && pnpm run build",
+  "buildCommand": "pnpm --prefix dashboard install && pnpm --prefix dashboard run build",
   "outputDirectory": "dashboard/dist",
   "framework": "vite",
   "rewrites": [
