@@ -340,6 +340,7 @@ export default function App() {
           </span>
         </div>
 
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           {/* Prominent Operating Mode Indicator Badge */}
           <div
             onClick={() => setDemo((d) => !d)}

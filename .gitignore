@@ -13,3 +13,5 @@ ledger/*
 !ledger/.gitignore
 .vercel
 .env*
+!.env.example
+!dashboard/.env.production

@@ -1,0 +1,7 @@
+{
+  "name": "x402-mcp",
+  "private": true,
+  "scripts": {
+    "build": "cd dashboard && pnpm install && pnpm run build"
+  }
+}
