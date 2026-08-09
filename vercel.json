@@ -7,10 +7,6 @@
     {
       "source": "/(stats|events|ledger|doctor|probe|wallet|health|seller|swarm)(.*)",
       "destination": "https://x402-mission-control.onrender.com/$1$2"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
     }
   ]
 }
