@@ -264,6 +264,22 @@ async def well_known_x402() -> dict:
     return agent_surface.well_known_x402()
 
 
+@app.get("/.well-known/agent-card.json")
+async def well_known_agent_card() -> dict:
+    """A2A Protocol v1.0 Agent Card (ecosystem discovery)."""
+    from app import agent_surface
+
+    return agent_surface.agent_card()
+
+
+@app.get("/.well-known/agent.json")
+async def well_known_agent_json() -> dict:
+    """Legacy A2A Agent Card path; same payload as agent-card.json."""
+    from app import agent_surface
+
+    return agent_surface.agent_card()
+
+
 @app.get("/llms.txt", response_class=PlainTextResponse)
 async def llms_txt() -> str:
     """Agent-facing docs: endpoints, prices, and the failure modes that matter."""

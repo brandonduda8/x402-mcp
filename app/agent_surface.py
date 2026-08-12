@@ -1,4 +1,4 @@
-"""The machine-readable storefront surface: /llms.txt and /.well-known/x402.
+"""The machine-readable storefront surface: /llms.txt, /.well-known/x402, A2A agent card.
 
 Agents read these before paying — every high-demand x402 host documents for
 machines, not humans. Both documents are BUILT FROM LIVE CONFIG rather than
@@ -244,6 +244,7 @@ def llms_txt() -> str:
         "",
         f"- x402 manifest: {base}/.well-known/x402",
         f"- MCP manifest:  {base}/.well-known/mcp (16 tools, Streamable HTTP at /mcp/mcp)",
+        f"- A2A Agent Card: {base}/.well-known/agent-card.json",
         f"- Health: {base}/health · Checks: {base}/doctor · Ops: {base}/dashboard",
         "",
         "## Operator",
@@ -254,3 +255,208 @@ def llms_txt() -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def agent_card() -> dict[str, Any]:
+    """A2A Protocol v1.0 Agent Card for ecosystem discovery.
+
+    Built from the live city registry and pricing config so skills cannot
+    drift from /us/cities. Advertises HTTP+JSON interfaces only — this host
+    is an x402 micropayment storefront, not a JSON-RPC A2A Task endpoint.
+    Streaming and push are disabled because they are not implemented.
+    """
+    base = _base()
+    try:
+        from app.city_compliance import registry
+    except Exception:  # pragma: no cover
+        cities: list[dict[str, Any]] = []
+    else:
+        cities = registry.list_cities()
+
+    codes = [c["code"] for c in cities]
+    codes_pipe = "|".join(codes) if codes else "mn"
+    # Prefer the network-wide city price when present; fall back to MN price.
+    price = getattr(settings, "city_network_price", None) or settings.mn_property_check_price
+    network = settings.x402_default_network
+
+    skills: list[dict[str, Any]] = [
+        {
+            "id": "us-cities-catalog",
+            "name": "US City Open-Data Compliance Catalog",
+            "description": (
+                "Free machine-readable catalog of multi-city US property compliance "
+                f"endpoints. Returns network=us-city-open-data-compliance, price, "
+                f"CAIP-2 {network}, and per-city paid_url, sample_url, sample_address, "
+                "sources_label, and tags. No payment required."
+            ),
+            "tags": [
+                "catalog",
+                "discovery",
+                "us-cities",
+                "housing",
+                "compliance",
+                "open-data",
+                "x402",
+                "free",
+            ],
+            "examples": [
+                "List all US city property compliance endpoints",
+                "Which cities support rental compliance checks and at what price?",
+                f"GET {base}/us/cities",
+            ],
+            "inputModes": ["text/plain", "application/json"],
+            "outputModes": ["application/json"],
+        },
+        {
+            "id": "us-city-property-check",
+            "name": "US City Property Compliance Check",
+            "description": (
+                f"Paid address-level open-data compliance report for one of "
+                f"{len(cities)} US jurisdictions. Input: city code "
+                f"({codes_pipe}) and street address (1-120 chars). "
+                f"Price: {price} USDC on {network} via x402 "
+                "(HTTP 402 + PAYMENT-SIGNATURE). Output: JSON compliance report "
+                "from city open data. Free fixed-address samples at "
+                "/us/{code}/property-check/sample without payment."
+            ),
+            "tags": [
+                "property",
+                "compliance",
+                "rental",
+                "housing",
+                "violations",
+                "open-data",
+                "x402",
+                "usdc",
+                "base",
+            ],
+            "examples": [
+                f"Check Minneapolis rental license for 1700 Penn Ave N (city=mn)",
+                f"GET {base}/us/{{city_code}}/property-check?address={{street}}",
+            ],
+            "inputModes": ["text/plain", "application/json"],
+            "outputModes": ["application/json"],
+        },
+        {
+            "id": "us-city-property-check-sample",
+            "name": "US City Property Compliance Sample (Free)",
+            "description": (
+                "Free fixed-address sample report for any supported city code. "
+                "Same JSON shape as the paid property-check; no payment required. "
+                "Use for integration testing before paying for arbitrary addresses."
+            ),
+            "tags": [
+                "sample",
+                "free",
+                "property",
+                "compliance",
+                "open-data",
+                "x402",
+            ],
+            "examples": [
+                f"GET {base}/us/mn/property-check/sample",
+                f"GET {base}/us/sea/property-check/sample",
+                "Show the free Chicago sample compliance report (city=chi)",
+            ],
+            "inputModes": ["text/plain", "application/json"],
+            "outputModes": ["application/json"],
+        },
+    ]
+
+    for c in cities:
+        code = c["code"]
+        sample_addr = c["sample_address"]
+        paid = c["paid_url"]
+        sample = c["sample_url"]
+        tags = list(
+            dict.fromkeys(
+                list(c.get("tags") or [])
+                + [code, c["name"].lower().replace(" ", ""), "compliance", "x402"]
+            )
+        )
+        skills.append(
+            {
+                "id": f"property-check-{code}",
+                "name": c["service_name"],
+                "description": (
+                    f"{c['service_name']} for {c['name']}, {c['state']}. "
+                    f"Source: {c['sources_label']}. "
+                    f"Paid: GET {paid}?address={{street}} at {c['price']} USDC "
+                    f"on {c['network']} (x402). Free sample: {sample} "
+                    f"(fixed address: {sample_addr})."
+                ),
+                "tags": tags,
+                "examples": [
+                    f"Check {c['name']} compliance for {sample_addr}",
+                    f"GET {paid}?address={sample_addr.replace(' ', '%20')}",
+                    f"Free sample: GET {sample}",
+                ],
+                "inputModes": ["text/plain", "application/json"],
+                "outputModes": ["application/json"],
+            }
+        )
+
+    return {
+        "name": "US City Open-Data Compliance (x402)",
+        "description": (
+            "Pay-per-call US multi-city property compliance agent. Discovers "
+            f"{len(cities)} open-data jurisdictions via free catalog "
+            f"{base}/us/cities; returns address-level rental/license/violation "
+            f"reports at {price} USDC on Base ({network}) using HTTP 402 "
+            "micropayments (x402 v2). No API key, no signup. Free samples at "
+            "/us/{city_code}/property-check/sample."
+        ),
+        "version": "0.1.0",
+        "protocolVersion": "1.0",
+        "provider": {
+            "organization": "x402-mcp",
+            "url": "https://github.com/kwizzlesurp10-ctrl/x402-mcp",
+        },
+        "documentationUrl": f"{base}/llms.txt",
+        "supportedInterfaces": [
+            {
+                "url": f"{base}/us/cities",
+                "protocolBinding": "HTTP+JSON",
+                "protocolVersion": "1.0",
+            },
+            {
+                "url": f"{base}/us/{{city_code}}/property-check",
+                "protocolBinding": "HTTP+JSON",
+                "protocolVersion": "1.0",
+            },
+            {
+                "url": f"{base}/.well-known/x402",
+                "protocolBinding": "HTTP+JSON",
+                "protocolVersion": "1.0",
+            },
+        ],
+        "capabilities": {
+            "streaming": False,
+            "pushNotifications": False,
+            "extendedAgentCard": False,
+        },
+        "defaultInputModes": ["text/plain", "application/json"],
+        "defaultOutputModes": ["application/json"],
+        "skills": skills,
+        "securitySchemes": {
+            "x402": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "PAYMENT-SIGNATURE",
+                "description": (
+                    f"x402 v2 micropayment on {network}. Unauthenticated GET "
+                    "returns HTTP 402 with PAYMENT-REQUIRED challenge (base64 "
+                    "JSON: amount, payTo, asset USDC, network). Client signs "
+                    "EIP-3009 transferWithAuthorization and retries with "
+                    "PAYMENT-SIGNATURE. Settlement is gasless for the buyer "
+                    f"(USDC required, not ETH). Catalog {base}/us/cities and "
+                    "all /sample endpoints require no payment. Authoritative "
+                    f"payment metadata: {base}/.well-known/x402"
+                ),
+            }
+        },
+        "security": [
+            {},
+            {"x402": []},
+        ],
+    }
