@@ -98,8 +98,9 @@ def _store(name: str, fp: str, header: str) -> None:
 
 def clear() -> None:
     """Clear the in-memory cache. Useful for testing."""
-    global _mem
-    _mem = {}
+    # Mutate the existing dict instead of rebinding so callers that hold
+    # a reference to _mem (or tests that patch _mem) see the cleared state.
+    _mem.clear()
 
 
 def get_or_build(name: str, fingerprint: str, builder: Callable[[], str]) -> str:
