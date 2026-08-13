@@ -194,9 +194,31 @@ async def generic_handler(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
-@app.get("/", include_in_schema=False)
-async def root() -> RedirectResponse:
-    return RedirectResponse(url="/dashboard", status_code=307)
+@app.get("/", include_in_schema=False, response_class=HTMLResponse)
+async def root() -> HTMLResponse:
+    """Homepage HTML so domain/app ownership meta tags are scrapable at /.
+
+    Scrapers (Base Build metadata verification, etc.) often only fetch `/` and
+    may not follow a bare 307. Keep a soft redirect for humans.
+    """
+    return HTMLResponse(
+        """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="base:app_id" content="6a7018e2a8c4f2b6db3b3e71" />
+<title>x402 MCP Storefront</title>
+<meta http-equiv="refresh" content="0; url=/dashboard">
+<link rel="canonical" href="/dashboard">
+</head>
+<body>
+<p>x402 MCP Storefront — <a href="/dashboard">open mission control</a>.</p>
+</body>
+</html>
+""",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 # Directories render a seller's favicon next to its listing — x402scan pulls

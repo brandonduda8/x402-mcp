@@ -6,17 +6,23 @@ from app.main import app
 
 client = TestClient(app)
 
+BASE_APP_ID_META = 'name="base:app_id" content="6a7018e2a8c4f2b6db3b3e71"'
 
-def test_root_redirects_to_dashboard() -> None:
+
+def test_root_serves_ownership_meta_and_points_at_dashboard() -> None:
+    """`/` must expose Base ownership meta for scrapers (not a bare 307)."""
     response = client.get("/", follow_redirects=False)
-    assert response.status_code == 307
-    assert response.headers["location"] == "/dashboard"
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert BASE_APP_ID_META in response.text
+    assert 'content="0; url=/dashboard"' in response.text or 'href="/dashboard"' in response.text
 
 
 def test_dashboard_serves_html() -> None:
     response = client.get("/dashboard")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
+    assert BASE_APP_ID_META in response.text
 
 
 def test_dashboard_polls_real_endpoints() -> None:
