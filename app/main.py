@@ -207,7 +207,7 @@ async def root() -> HTMLResponse:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="base:app_id" content="944ef4db-601d-4b22-b612-cbf733d6bd31" />
+<meta name="base:app_id" content="6a7018e2a8c4f2b6db3b3e71" />
 <title>x402 MCP Storefront</title>
 <meta http-equiv="refresh" content="0; url=/dashboard">
 <link rel="canonical" href="/dashboard">
