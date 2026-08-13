@@ -6,7 +6,7 @@ from app.main import app
 
 client = TestClient(app)
 
-BASE_APP_ID_META = 'name="base:app_id" content="6a7018e2a8c4f2b6db3b3e71"'
+BASE_APP_ID_META = 'name="base:app_id" content="944ef4db-601d-4b22-b612-cbf733d6bd31"'
 
 
 def test_root_serves_ownership_meta_and_points_at_dashboard() -> None:
