@@ -7,6 +7,7 @@ import json
 import logging
 import time
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 from typing import AsyncIterator, Literal
 
 import httpx
@@ -22,6 +23,7 @@ from fastapi.responses import (
     Response,
     StreamingResponse,
 )
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, HttpUrl
 
 from app.commerce import quota_store
@@ -243,10 +245,37 @@ async def favicon() -> Response:
     )
 
 
+# Mission Control SPA (same layout as Vercel). Built into app/static/mission_control
+# (Docker multi-stage or local `pnpm build` + copy). Falls back to the legacy
+# single-file terminal if the SPA bundle is missing (e.g. partial checkouts).
+_MC_DIST = Path(__file__).resolve().parent / "static" / "mission_control"
+_BASE_APP_ID_META = '<meta name="base:app_id" content="6a7018e2a8c4f2b6db3b3e71" />'
+
+
+def _mission_control_html() -> str:
+    index_path = _MC_DIST / "index.html"
+    if index_path.is_file():
+        html = index_path.read_text(encoding="utf-8")
+        if "base:app_id" not in html:
+            html = html.replace("<head>", f"<head>\n{_BASE_APP_ID_META}", 1)
+        return html
+    token_js = f"var __OP_TOKEN__={json.dumps(settings.operator_token)};"
+    return DASHBOARD_HTML.replace("/* __INJECT_TOKEN__ */", token_js, 1)
+
+
 @app.get("/dashboard", response_class=HTMLResponse)
+@app.get("/dashboard/", response_class=HTMLResponse)
 async def dashboard() -> HTMLResponse:
-    """Operator terminal: live health, quota meters, tool matrix, revenue paths."""
-    # Inject operator token so dashboard JS can auth /quota polls.
+    """React Mission Control SPA (Vercel layout), same-origin API."""
+    return HTMLResponse(
+        _mission_control_html(),
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/dashboard/legacy", response_class=HTMLResponse)
+async def dashboard_legacy() -> HTMLResponse:
+    """Previous single-file operator terminal (kept for rollback/compare)."""
     token_js = f"var __OP_TOKEN__={json.dumps(settings.operator_token)};"
     html = DASHBOARD_HTML.replace("/* __INJECT_TOKEN__ */", token_js, 1)
     return HTMLResponse(html)
@@ -952,3 +981,12 @@ else:
         app.mount("/mcp", mcp.sse_app())
     except AttributeError:
         pass
+
+# Mission Control hashed Vite assets (JS/CSS). Must be mounted after API routes.
+_mc_assets = _MC_DIST / "assets"
+if _mc_assets.is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(_mc_assets)),
+        name="mission-control-assets",
+    )
