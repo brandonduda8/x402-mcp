@@ -13,10 +13,12 @@ import { RateSparkline } from "./components/RateSparkline";
 import { SellerWizard } from "./components/SellerWizard";
 import { VirtualizedLedger } from "./components/VirtualizedLedger";
 import { WalletPanel } from "./components/WalletPanel";
+import { OperatorHeader } from "./components/OperatorHeader";
 import { demoActivity, demoDoctor, demoOs, demoRevenue, demoSpend, demoStats } from "./fixtures/demo";
 import { explain } from "./glossary";
 import { useSSE, type StreamEvent } from "./hooks/useSSE";
-import { downloadText, ledgerToCsv, sumLedgerAtomic } from "./utils/ledger";
+import { downloadText, ledgerToCsv } from "./utils/ledger";
+import { calculateFinances } from "./utils/finance";
 import { deriveMissionSteps } from "./utils/mission";
 import { formatUsdcAtomic } from "./utils/usdc";
 import { relativeTime } from "./utils/time";
@@ -67,7 +69,7 @@ export default function App() {
     setActivity((prev) => [e, ...prev].slice(0, 200));
   }, []);
 
-  const { status: liveStatus } = useSSE(!demo, onEvent);
+  const { status: serverStatus, reconnect } = useSSE(!demo, onEvent);
 
   const refresh = useCallback(async () => {
     if (demo) {
@@ -215,10 +217,11 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const netAtomic = useMemo(
-    () => sumLedgerAtomic(revenue) - sumLedgerAtomic(spend, true),
+  const finances = useMemo(
+    () => calculateFinances(revenue, spend),
     [revenue, spend],
   );
+  const netAtomic = finances.netMarginAtomic;
 
   const walletSepoliaAtomic = wallet?.balances.sepolia_usdc_atomic ?? null;
 
@@ -230,22 +233,18 @@ export default function App() {
         revenue,
         activity,
         apiError: error,
-        liveOk: liveStatus === "live" || liveStatus === "polling",
+        liveOk: serverStatus === "connected" || serverStatus === "degraded",
         probeDone,
         walletSepoliaAtomic,
         doctor,
       }),
-    [stats, spend, revenue, activity, error, liveStatus, probeDone, walletSepoliaAtomic, doctor],
+    [stats, spend, revenue, activity, error, serverStatus, probeDone, walletSepoliaAtomic, doctor],
   );
 
   const totalCalls = stats?.agents.reduce((n, a) => n + a.calls_this_month, 0) ?? 0;
   const quotaLimit = stats?.config.free_tier_monthly_quota ?? 500;
   const showPersistence = stats?.config.redis_mode === "memory";
   const actionsEnabled = import.meta.env.VITE_DASHBOARD_ACTIONS === "true";
-
-  const liveLabel = liveStatus === "live" ? "Live" : liveStatus === "polling" ? "Polling" : "Disconnected";
-  const liveColor =
-    liveStatus === "live" ? "var(--green)" : liveStatus === "polling" ? "var(--amber)" : "var(--red)";
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -277,11 +276,17 @@ export default function App() {
     setWizardOpen(true);
   };
 
+  const alerts = [];
+  if (serverStatus === "disconnected") alerts.push("API disconnected");
+  if (os?.disk && os.disk.percent >= 70) alerts.push(`Disk at ${os.disk.percent.toFixed(0)}%`);
+
+
+
   return (
     <div>
       {demo && (
-        <div style={{ background: "var(--amber)", color: "#000", textAlign: "center", padding: 4, fontWeight: 600 }}>
-          DEMO — sample data
+        <div style={{ background: "var(--amber)", color: "#000", textAlign: "center", padding: 4, fontWeight: 700, textTransform: "uppercase" }}>
+          DEMO — Sample data only
         </div>
       )}
       {showPersistence && (
@@ -301,83 +306,24 @@ export default function App() {
           Server restarted — in-memory counters reset.
         </div>
       )}
-      {error && (
+      {serverStatus === "disconnected" && (
         <div className="panel" style={{ margin: 8, borderColor: "var(--red)" }}>
-          Dashboard can&apos;t reach the server at :8402 — is it running?
-          <pre className="mono" style={{ marginTop: 8 }}>make up</pre>
+          <strong style={{ color: "var(--red)" }}>Disconnected</strong>
+          <p>Dashboard can&apos;t reach the server at {import.meta.env.VITE_PUBLIC_API_BASE_URL || "/api"}.</p>
+          {error && <p style={{ color: "var(--text-muted)", fontSize: 12 }}>{error}</p>}
+          <button type="button" onClick={reconnect} style={{ marginTop: 8 }}>Retry Connection</button>
         </div>
       )}
 
-      <header
-        className="panel"
-        style={{
-          margin: 16,
-          display: "flex",
-          gap: 16,
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          padding: "14px 24px",
-          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(6, 9, 14, 0.9) 100%)",
-        }}
-      >
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <strong style={{ fontFamily: "var(--font-heading)", fontSize: 18, letterSpacing: "-0.02em", color: "#fff", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ color: "var(--neon-cyan)" }}>x402</span> // mission control
-          </strong>
-          <span className="mono" style={{ color: "var(--base)", background: "rgba(0, 82, 255, 0.12)", padding: "3px 10px", borderRadius: 6, fontSize: 12, border: "1px solid rgba(0, 82, 255, 0.3)" }}>
-            {stats?.config.network ?? "—"}
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, background: "rgba(0,0,0,0.3)", padding: "4px 12px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)" }}>
-            <span className="ping-indicator" style={{ background: liveColor }} />
-            <span style={{ color: liveColor, fontWeight: 600 }}>{liveLabel}</span>
-          </span>
-        </div>
-
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <label style={{ fontSize: 13, color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-            <input
-              type="checkbox"
-              aria-label="Demo"
-              checked={demo}
-              onChange={(e) => setDemo(e.target.checked)}
-            />{" "}
-            Demo
-          </label>
-          <select
-            value={density}
-            onChange={(e) => setDensity(e.target.value as Density)}
-            aria-label="Density mode"
-            style={{
-              background: "rgba(0,0,0,0.4)",
-              color: "var(--text)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 6,
-              padding: "5px 10px",
-              fontSize: 12,
-            }}
-          >
-            <option value="guided">Guided</option>
-            <option value="standard">Standard</option>
-            <option value="operator">Operator</option>
-          </select>
-          <button type="button" onClick={() => setWizardOpen(true)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
-            Setup wizard
-          </button>
-          <button type="button" onClick={() => setSellerOpen(true)} style={{ background: "linear-gradient(135deg, var(--neon-cyan), var(--base))", border: "none", color: "#000", fontWeight: 700, padding: "6px 16px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
-            Sell something
-          </button>
-          <button type="button" onClick={() => setPaletteOpen(true)} className="mono" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text-muted)", padding: "6px 12px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
-            ⌘K
-          </button>
-          <button type="button" onClick={() => setMissionOpen((v) => !v)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
-            Mission
-          </button>
-          <button type="button" onClick={() => setTourOpen(true)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
-            Show me around
-          </button>
-        </div>
-      </header>
+      <OperatorHeader
+        status={serverStatus}
+        lastSync={pulse?.generated_at || null}
+        netMarginAtomic={finances.netMarginAtomic}
+        grossRevenueAtomic={finances.grossRevenueAtomic}
+        spendAtomic={finances.spendAtomic}
+        alerts={alerts}
+        onRetry={reconnect}
+      />
 
       <MissionProgress steps={missionSteps} open={missionOpen} onToggle={() => setMissionOpen((v) => !v)} />
 
@@ -426,8 +372,6 @@ export default function App() {
       )}
 
       <main className="grid-12">
-        <ActiveStorefront products={products} revenueRows={revenue} activityEvents={activity} />
-
         <section id="panel-hero" className="panel" style={{ gridColumn: "span 3" }}>
           <h3>
             {density === "guided" ? "Money left after costs" : "Net position"}
@@ -456,6 +400,13 @@ export default function App() {
           {netAtomic >= 0 && revenue.length > 0 && (
             <small style={{ color: "var(--green)" }}>Self-sustaining</small>
           )}
+        </section>
+
+        <section id="panel-wallet" className="panel hide-mobile" style={{ gridColumn: "span 3" }}>
+          <h3>
+            Wallet <PanelHelp term="atomic units" title="Wallet" />
+          </h3>
+          <WalletPanel wallet={wallet} density={density} />
         </section>
 
         <section className="panel hide-mobile" style={{ gridColumn: "span 3" }}>
@@ -494,16 +445,9 @@ export default function App() {
           <div className="mono">{stats?.agents[0]?.rate_limit_remaining ?? "—"} / min left</div>
         </section>
 
-        <section id="panel-wallet" className="panel hide-mobile" style={{ gridColumn: "span 3" }}>
-          <h3>
-            Wallet <PanelHelp term="atomic units" title="Wallet" />
-          </h3>
-          <WalletPanel wallet={wallet} density={density} />
-        </section>
-
-        <PulsePanel pulse={pulse} />
-
         <OsHealthPanel os={os} />
+
+        <ActiveStorefront products={products} revenueRows={revenue} activityEvents={activity} />
 
         <section className="panel" style={{ gridColumn: "span 8" }}>
           <h3>Activity</h3>
@@ -534,65 +478,67 @@ export default function App() {
           })}
         </section>
 
-        <SwarmActivity events={activity} products={products} revenue={swarmRevenue ?? undefined} />
-
-        <section id="panel-spend" className="panel hide-mobile" style={{ gridColumn: "span 6" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ margin: 0 }}>Spend ledger</h3>
-            {spend.length > 0 && (
-              <button
-                type="button"
-                onClick={() => downloadText("spend.csv", ledgerToCsv(spend), "text/csv")}
-              >
-                CSV
-              </button>
-            )}
-          </div>
-          {spend.length === 0 ? (
-            <EmptyPanel
-              title="Nothing spent"
-              action="Good. Try a $0 testnet fetch first."
-              command="pay_and_fetch on Sepolia"
-            />
-          ) : (
-            <VirtualizedLedger
-              rows={spend}
-              kind="spend"
-              filterNetwork={ledgerFilterNetwork || undefined}
-              filterAgent={ledgerFilterAgent || undefined}
-            />
-          )}
-        </section>
-
-        <section id="panel-revenue" className="panel hide-mobile" style={{ gridColumn: "span 6" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ margin: 0 }}>Revenue ledger</h3>
-            {revenue.length > 0 && (
-              <button
-                type="button"
-                onClick={() =>
-                  downloadText("revenue.jsonl", revenue.map((r) => JSON.stringify(r)).join("\n"), "application/jsonl")
-                }
-              >
-                JSONL
-              </button>
-            )}
-          </div>
-          {revenue.length === 0 ? (
-            <EmptyPanel title="No revenue yet" action="Build seller requirements and verify a payment." />
-          ) : (
-            <VirtualizedLedger
-              rows={revenue}
-              kind="revenue"
-              filterNetwork={ledgerFilterNetwork || undefined}
-              filterAgent={ledgerFilterAgent || undefined}
-            />
-          )}
-        </section>
-
-        <section id="panel-inspector" className="panel hide-mobile" style={{ gridColumn: "span 12" }}>
-          <Inspector402 onProbed={(r) => setProbeDone(r != null && !("error" in (r ?? {})))} />
-        </section>
+        {density === "operator" && (
+          <>
+            <PulsePanel pulse={pulse} />
+            <SwarmActivity events={activity} products={products} revenue={swarmRevenue ?? undefined} />
+            <section id="panel-spend" className="panel hide-mobile" style={{ gridColumn: "span 6" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0 }}>Spend ledger</h3>
+                {spend.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => downloadText("spend.csv", ledgerToCsv(spend), "text/csv")}
+                  >
+                    CSV
+                  </button>
+                )}
+              </div>
+              {spend.length === 0 ? (
+                <EmptyPanel
+                  title="Nothing spent"
+                  action="Good. Try a $0 testnet fetch first."
+                  command="pay_and_fetch on Sepolia"
+                />
+              ) : (
+                <VirtualizedLedger
+                  rows={spend}
+                  kind="spend"
+                  filterNetwork={ledgerFilterNetwork || undefined}
+                  filterAgent={ledgerFilterAgent || undefined}
+                />
+              )}
+            </section>
+            <section id="panel-revenue" className="panel hide-mobile" style={{ gridColumn: "span 6" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3 style={{ margin: 0 }}>Revenue ledger</h3>
+                {revenue.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadText("revenue.jsonl", revenue.map((r) => JSON.stringify(r)).join("\n"), "application/jsonl")
+                    }
+                  >
+                    JSONL
+                  </button>
+                )}
+              </div>
+              {revenue.length === 0 ? (
+                <EmptyPanel title="No revenue yet" action="Build seller requirements and verify a payment." />
+              ) : (
+                <VirtualizedLedger
+                  rows={revenue}
+                  kind="revenue"
+                  filterNetwork={ledgerFilterNetwork || undefined}
+                  filterAgent={ledgerFilterAgent || undefined}
+                />
+              )}
+            </section>
+            <section id="panel-inspector" className="panel hide-mobile" style={{ gridColumn: "span 12" }}>
+              <Inspector402 onProbed={(r) => setProbeDone(r != null && !("error" in (r ?? {})))} />
+            </section>
+          </>
+        )}
       </main>
 
       <CommandPalette

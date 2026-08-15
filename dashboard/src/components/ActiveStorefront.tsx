@@ -15,6 +15,8 @@ type ActiveCall = {
   status: "LIVE FOR SALE" | "SOLD";
 };
 
+import { API_BASE } from "../api/client";
+
 export function ActiveStorefront({
   products,
   revenueRows = [],
@@ -24,7 +26,7 @@ export function ActiveStorefront({
   revenueRows?: LedgerRow[];
   activityEvents?: StreamEvent[];
 }) {
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:8402";
+  const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
 
   // Base Built-in x402 Endpoints
   const baseCalls: ActiveCall[] = [
@@ -177,7 +179,7 @@ export function ActiveStorefront({
       </div>
 
       {/* Category Filter Tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.08)", pb: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.08)", paddingBottom: 12 }}>
         {["ALL", "Canonical Data", "US Compliance Network", "Swarm Composite"].map((cat) => (
           <button
             key={cat}
@@ -216,7 +218,7 @@ export function ActiveStorefront({
                 padding: 16,
                 display: "flex",
                 flexDirection: "column",
-                justify: "space-between",
+                justifyContent: "space-between",
                 gap: 12,
                 boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
                 transition: "all 0.2s ease",
@@ -268,8 +270,8 @@ export function ActiveStorefront({
                   borderRadius: 8,
                   padding: "8px 10px",
                   display: "flex",
+                  justifyContent: "space-between",
                   alignItems: "center",
-                  justify: "space-between",
                   gap: 8,
                 }}
               >
