@@ -23,6 +23,13 @@ import { deriveMissionSteps } from "./utils/mission";
 import { formatUsdcAtomic } from "./utils/usdc";
 import { relativeTime } from "./utils/time";
 
+import { ParallaxProtocolHero } from "./components/ParallaxProtocolHero";
+import { FoundationTicker } from "./components/FoundationTicker";
+import { ChainDistributionBar } from "./components/ChainDistributionBar";
+import { FacilitatorLeaderboard } from "./components/FacilitatorLeaderboard";
+import { BazaarResourceExplorer } from "./components/BazaarResourceExplorer";
+import { Bubble } from "./components/canvasui/Bubble";
+
 type Density = "guided" | "standard" | "operator";
 
 function EmptyPanel({ title, action, command }: { title: string; action: string; command?: string }) {
@@ -283,8 +290,26 @@ export default function App() {
 
 
   return (
-    <div>
-      {demo && (
+    <Bubble
+      size={30}
+      trail={24}
+      follow={0.5}
+      blend={14}
+      speed={2}
+      refraction={80}
+      dispersion={1}
+      frost={0}
+      shine={0.25}
+      rim={0.5}
+      iridescence={1}
+      intensity={0.9}
+      tintStrength={0}
+      tint={[1, 1, 1]}
+      colorA={[0.2902, 0.4549, 0.7216]}
+      colorB={[0.4118, 0.4118, 0.4157]}
+    >
+      <div>
+        {demo && (
         <div style={{ background: "var(--amber)", color: "#000", textAlign: "center", padding: 4, fontWeight: 700, textTransform: "uppercase" }}>
           DEMO — Sample data only
         </div>
@@ -324,6 +349,97 @@ export default function App() {
         alerts={alerts}
         onRetry={reconnect}
       />
+      <div
+        className="panel"
+        style={{
+          margin: "0 16px 16px 16px",
+          display: "flex",
+          gap: 16,
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          padding: "10px 24px",
+          background: "linear-gradient(135deg, rgba(15, 23, 42, 0.8) 0%, rgba(6, 9, 14, 0.9) 100%)",
+        }}
+      >
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            onClick={() => setDemo((d) => !d)}
+            title={
+              demo
+                ? "Currently in Public Ecosystem Showcase Mode. Click to switch to Private Operator Terminal."
+                : "Currently in Private Operator Terminal Mode. Click to switch to Public Ecosystem Showcase."
+            }
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "4px 12px",
+              borderRadius: 20,
+              background: demo ? "rgba(245, 158, 11, 0.15)" : "rgba(0, 240, 255, 0.15)",
+              border: demo ? "1px solid rgba(245, 158, 11, 0.4)" : "1px solid rgba(0, 240, 255, 0.4)",
+              cursor: "pointer",
+              fontSize: 11,
+              fontFamily: "var(--font-mono, monospace)",
+              fontWeight: 600,
+              color: demo ? "#F59E0B" : "#00F0FF",
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: demo ? "#F59E0B" : "#00F0FF",
+                boxShadow: demo ? "0 0 8px #F59E0B" : "0 0 8px #00F0FF",
+              }}
+            />
+            {demo ? "🌐 Public Ecosystem Showcase" : "🛡️ Private Operator Terminal"}
+          </div>
+
+          <label style={{ fontSize: 13, color: "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="checkbox"
+              aria-label="Demo"
+              checked={demo}
+              onChange={(e) => setDemo(e.target.checked)}
+            />{" "}
+            Demo
+          </label>
+          <select
+            value={density}
+            onChange={(e) => setDensity(e.target.value as Density)}
+            aria-label="Density mode"
+            style={{
+              background: "rgba(0,0,0,0.4)",
+              color: "var(--text)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 6,
+              padding: "5px 10px",
+              fontSize: 12,
+            }}
+          >
+            <option value="guided">Guided</option>
+            <option value="standard">Standard</option>
+            <option value="operator">Operator</option>
+          </select>
+          <button type="button" onClick={() => setWizardOpen(true)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            Setup wizard
+          </button>
+          <button type="button" onClick={() => setSellerOpen(true)} style={{ background: "linear-gradient(135deg, var(--neon-cyan), var(--base))", border: "none", color: "#000", fontWeight: 700, padding: "6px 16px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            Sell something
+          </button>
+          <button type="button" onClick={() => setPaletteOpen(true)} className="mono" style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text-muted)", padding: "6px 12px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            ⌘K
+          </button>
+          <button type="button" onClick={() => setMissionOpen((v) => !v)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            Mission
+          </button>
+          <button type="button" onClick={() => setTourOpen(true)} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff", padding: "6px 14px", borderRadius: 6, fontSize: 12, cursor: "pointer" }}>
+            Show me around
+          </button>
+        </div>
+      </div>
 
       <MissionProgress steps={missionSteps} open={missionOpen} onToggle={() => setMissionOpen((v) => !v)} />
 
@@ -371,7 +487,18 @@ export default function App() {
         </div>
       )}
 
+      <div style={{ padding: "0 16px" }}>
+        <FoundationTicker />
+      </div>
+
       <main className="grid-12">
+        <div style={{ gridColumn: "span 12" }}>
+          <ParallaxProtocolHero />
+        </div>
+
+        <ChainDistributionBar density={density} />
+        <BazaarResourceExplorer density={density} />
+        <FacilitatorLeaderboard density={density} />
         <section id="panel-hero" className="panel" style={{ gridColumn: "span 3" }}>
           <h3>
             {density === "guided" ? "Money left after costs" : "Net position"}
@@ -564,5 +691,6 @@ export default function App() {
         </footer>
       )}
     </div>
+    </Bubble>
   );
 }

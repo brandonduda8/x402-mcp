@@ -96,6 +96,13 @@ def _store(name: str, fp: str, header: str) -> None:
         log.warning("challenge_cache: failed to persist %s", name)
 
 
+def clear() -> None:
+    """Clear the in-memory cache. Useful for testing."""
+    # Mutate the existing dict instead of rebinding so callers that hold
+    # a reference to _mem (or tests that patch _mem) see the cleared state.
+    _mem.clear()
+
+
 def get_or_build(name: str, fingerprint: str, builder: Callable[[], str]) -> str:
     """Return a cached challenge for `name`, rebuilding only when it must.
 

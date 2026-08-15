@@ -66,11 +66,7 @@ def _facilitator_client(network: str | None = None):
             {"url": settings.cdp_facilitator_url, "create_headers": create_headers}
         )
 
-    from x402.http import FacilitatorConfig
-
-    return HTTPFacilitatorClient(
-        FacilitatorConfig(url=settings.x402_facilitator_url)
-    )
+    return HTTPFacilitatorClient()
 
 
 def _probe_http_client():

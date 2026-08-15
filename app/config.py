@@ -26,11 +26,13 @@ class Settings(BaseSettings):
     # Redis-ready: set REDIS_URL to migrate from in-memory stores.
     redis_url: str | None = None
 
+    # Buyer (hot) — only used for pay_and_fetch spends. Never use cold receive key here.
     evm_private_key: str | None = None
     svm_private_key: str | None = None
     # Signing-key source: "env" (default, deprecated) | keychain/hardware (pluggable).
     key_provider: str = "env"
 
+    # Seller (cold receive) — on-chain payTo for revenue. Prefer separate from buyer.
     x402_pay_to_address: str | None = None
     # Base Network Pulse synthesis inputs (real data sources).
     base_rpc_url: str = "https://mainnet.base.org"
@@ -76,6 +78,10 @@ class Settings(BaseSettings):
     # Buyer HTTP timeout; mainnet settlement via a facilitator can take 30-60s,
     # so keep this comfortably above the default httpx timeout.
     x402_http_timeout: float = 90.0
+
+    # CDP Secret API keys (faucet + CDP facilitator auth for Bazaar indexing)
+    cdp_api_key_id: str | None = None
+    cdp_api_key_secret: str | None = None
 
     cdp_discovery_url: str = (
         "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources"

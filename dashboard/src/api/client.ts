@@ -1,5 +1,5 @@
 export const API_BASE = import.meta.env.VITE_PUBLIC_API_BASE_URL || "";
-export const API = import.meta.env.VITE_PUBLIC_API_BASE_URL || "/api";
+export const API = import.meta.env.VITE_PUBLIC_API_BASE_URL || "";
 
 export type StatsResponse = {
   agents: Array<{
