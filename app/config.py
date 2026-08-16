@@ -173,6 +173,14 @@ class Settings(BaseSettings):
     # /mn/property-check. Price shared across network cities unless overridden.
     city_network_price: str = "$0.01"
 
+    # Multi-city rental diligence pack (POST /tasks/us-rental-diligence).
+    # Access-barrier composite: reuses city open-data joins, priced above the
+    # $0.01 single-address tier. Hard clamp [min, max] rejects misconfig at build.
+    diligence_pack_price: str = "$1.50"
+    diligence_pack_min_usdc: float = 0.75
+    diligence_pack_max_usdc: float = 2.50
+    diligence_pack_max_properties: int = 5
+
     # Middleware pilot (app/x402_middleware_pilot.py): a standalone route gated
     # via the x402 SDK's own FastAPI middleware (x402.http.middleware.fastapi)
     # instead of this repo's hand-rolled challenge/verify/settle path. Purely

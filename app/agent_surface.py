@@ -124,12 +124,28 @@ def paid_resources() -> list[dict[str, Any]]:
             "price": settings.mn_property_check_price,
             "network": settings.x402_default_network,
             "name": "Minneapolis rental compliance",
-            "what": "One-call compliance_verdict (licensed_clean | "
-            "licensed_with_violations | unlicensed | condemned_or_boarded) plus "
-            "rental license status, violation history, and condemned/boarded "
-            "flag for a Minneapolis street address, from city open data. "
-            f"Free sample (fixed address): {base}/mn/property-check/sample.",
+            "what": "Is this Minneapolis MN rental licensed and code-compliant? "
+            "GET ?address= (1-120 chars) → compliance_verdict enum "
+            "licensed_clean|licensed_with_violations|unlicensed|condemned_or_boarded "
+            "plus license/violation/condemned fields from city open data. "
+            f"Free sample: {base}/mn/property-check/sample.",
             "params": {"address": "street address string, 1-120 chars (required)"},
+        },
+        {
+            "url": f"{base}/tasks/us-rental-diligence",
+            "method": "POST",
+            "price": settings.diligence_pack_price,
+            "network": settings.x402_default_network,
+            "name": "US Multi-City Rental Diligence Pack",
+            "what": "Screen up to 5 US rental addresses across the open-data city "
+            "network in one paid call. POST JSON "
+            "{properties:[{city_code,address}]}. Returns per-property "
+            "compliance reports + pack risk_summary. Single-address $0.01 "
+            f"tier remains at {base}/us/{{code}}/property-check.",
+            "params": {
+                "properties": "array of {city_code, address}, 1-5 items (required body)",
+                "include_base_pulse_context": "optional bool",
+            },
         },
         {
             "url": f"{base}/us/cities",
@@ -366,6 +382,35 @@ def agent_card() -> dict[str, Any]:
             "inputModes": ["text/plain", "application/json"],
             "outputModes": ["application/json"],
         },
+        {
+            "id": "us-rental-diligence-pack",
+            "name": "US Multi-City Rental Diligence Pack",
+            "description": (
+                f"Paid composite: screen 1–{getattr(settings, 'diligence_pack_max_properties', 5)} "
+                f"US rental addresses across the open-data city network in one call. "
+                f"POST JSON {{properties:[{{city_code,address}}]}} to "
+                f"{base}/tasks/us-rental-diligence at "
+                f"{getattr(settings, 'diligence_pack_price', '$1.50')} USDC on {network} (x402). "
+                "Returns per-property compliance reports plus pack risk_summary. "
+                "Single-address $0.01 checks remain at /us/{{code}}/property-check."
+            ),
+            "tags": [
+                "rental",
+                "compliance",
+                "multicity",
+                "housing",
+                "due-diligence",
+                "x402",
+                "usdc",
+                "composite",
+            ],
+            "examples": [
+                f"POST {base}/tasks/us-rental-diligence with two cities",
+                "Screen MN + SEA rental addresses in one paid pack",
+            ],
+            "inputModes": ["application/json"],
+            "outputModes": ["application/json"],
+        },
     ]
 
     for c in cities:
@@ -426,6 +471,11 @@ def agent_card() -> dict[str, Any]:
             },
             {
                 "url": f"{base}/us/{{city_code}}/property-check",
+                "protocolBinding": "HTTP+JSON",
+                "protocolVersion": "1.0",
+            },
+            {
+                "url": f"{base}/tasks/us-rental-diligence",
                 "protocolBinding": "HTTP+JSON",
                 "protocolVersion": "1.0",
             },
