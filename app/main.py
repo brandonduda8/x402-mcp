@@ -339,10 +339,21 @@ async def llms_txt() -> str:
     return agent_surface.llms_txt()
 
 
+from datetime import datetime, timedelta
+import asyncio
+
+_stats_cache = {"time": None, "data": None}
+
 @app.get("/stats")
 async def stats_snapshot() -> dict:
     """Mission-control quota snapshot (read-only)."""
-    return quota_store.snapshot()
+    now = datetime.now()
+    if _stats_cache["time"] and now - _stats_cache["time"] < timedelta(seconds=10):
+        return _stats_cache["data"]
+    data = quota_store.snapshot()
+    _stats_cache["time"] = now
+    _stats_cache["data"] = data
+    return data
 
 
 @app.get("/events")
@@ -356,10 +367,18 @@ async def tool_events() -> StreamingResponse:
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
+_doctor_cache = {"time": None, "data": None}
+
 @app.get("/doctor")
 async def doctor_report() -> dict:
     """Machine-readable health checks for setup wizard."""
-    return run_checks()
+    now = datetime.now()
+    if _doctor_cache["time"] and now - _doctor_cache["time"] < timedelta(seconds=10):
+        return _doctor_cache["data"]
+    data = run_checks()
+    _doctor_cache["time"] = now
+    _doctor_cache["data"] = data
+    return data
 
 
 @app.get("/os")
@@ -428,10 +447,12 @@ async def seller_requirements(body: SellerRequirementsRequest) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+_ledger_cache = {"spend": {"time": None, "data": None}, "revenue": {"time": None, "data": None}}
+
 @app.get("/ledger/{name}")
 async def ledger_rows(name: Literal["spend", "revenue"]) -> list[dict]:
     """Agent-ops spend/revenue ledger (newest first, max 1000).
-
+    
     Revenue rows are annotated with `is_operator_settle`: True when the row's
     `payer` matches a configured operator wallet (cataloging/re-indexing, not
     a customer), False when it's a different wallet (a real external sale),
@@ -440,15 +461,25 @@ async def ledger_rows(name: Literal["spend", "revenue"]) -> list[dict]:
     "unknown", never as "external": most of this project's revenue history is
     self-settled, and the honest default is not to overclaim a sale.
     """
+    now = datetime.now()
+    cache = _ledger_cache[name]
+    if cache["time"] and now - cache["time"] < timedelta(seconds=10):
+        return cache["data"]
+
     rows = read_ledger_rows(name)
     if name != "revenue":
+        cache["time"] = now
+        cache["data"] = rows
         return rows
     operator_wallets = ledger_io.operator_wallet_set()
     for row in rows:
         row["is_operator_settle"] = ledger_io.classify_operator_settle(
             row, operator_wallets
         )
+    cache["time"] = now
+    cache["data"] = rows
     return rows
+
 
 
 @app.get("/swarm/runs")

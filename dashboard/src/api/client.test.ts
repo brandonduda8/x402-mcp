@@ -6,7 +6,7 @@ describe("client API_BASE fallback", () => {
     expect(API_BASE).toBe("");
   });
 
-  it("resolves to /api when no VITE variable is set", () => {
-    expect(API).toBe("/api");
+  it("resolves to empty string when no VITE variable is set", () => {
+    expect(API).toBe("");
   });
 });

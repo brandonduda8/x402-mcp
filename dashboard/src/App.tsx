@@ -72,11 +72,7 @@ export default function App() {
   const [ledgerFilterAgent, setLedgerFilterAgent] = useState("");
   const [tourOpen, setTourOpen] = useState(() => !localStorage.getItem("tourSeen"));
 
-  const onEvent = useCallback((e: StreamEvent) => {
-    setActivity((prev) => [e, ...prev].slice(0, 200));
-  }, []);
 
-  const { status: serverStatus, reconnect } = useSSE(!demo, onEvent);
 
   const refresh = useCallback(async () => {
     if (demo) {
@@ -203,10 +199,15 @@ export default function App() {
     }
   }, [demo, prevCalls]);
 
+  const onEvent = useCallback((e: StreamEvent) => {
+    setActivity((prev) => [e, ...prev].slice(0, 200));
+    refresh();
+  }, [refresh]);
+
+  const { status: serverStatus, reconnect } = useSSE(!demo, onEvent);
+
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 10_000);
-    return () => clearInterval(id);
   }, [refresh]);
 
   useEffect(() => {
