@@ -158,9 +158,11 @@ def _public_base_from_request(request: Request) -> str:
 # gated, every other route is unaffected.
 from app import x402_middleware_pilot  # noqa: E402
 from app.city_compliance.routes import router as city_compliance_router  # noqa: E402
+from app.diligence_routes import router as diligence_router  # noqa: E402
 
 x402_middleware_pilot.register(app)
 app.include_router(city_compliance_router)
+app.include_router(diligence_router)
 
 
 def _public_openapi() -> dict:
