@@ -379,9 +379,19 @@ def _build_x402_client(
         client.register_policy(prefer_network(network))
 
     if max_price_usdc is not None:
-        client.register_policy(max_amount(int(max_price_usdc * 1_000_000)))
+        client.register_policy(max_amount(usdc_cap_atomic(max_price_usdc)))
 
     return client
+
+
+def usdc_cap_atomic(max_price_usdc: float) -> int:
+    """Buyer max_amount cap in USDC atomic units (6 decimals).
+
+    Use round(), not truncating int(): ``int(0.01 * 1_000_000)`` is 9999 on
+    some IEEE-754 platforms, which silently refuses a $0.01 (10000) city
+    quote when the agent caps at list price.
+    """
+    return int(round(float(max_price_usdc) * 1_000_000))
 
 
 # USDC (the only asset this repo prices in) has 6 decimals, which both
@@ -795,14 +805,42 @@ async def verify_payment_payload(params: VerifyPaymentInput) -> dict[str, Any]:
     }
 
 
+def _invalid_payment_result(reason: str) -> dict[str, Any]:
+    """402-able failure dict — never raise into a paid HTTP handler."""
+    return {
+        "is_valid": False,
+        "invalid_reason": reason[:300],
+        "settlement": None,
+        "settlement_error": None,
+        "payment_settled": False,
+        "facilitator_url": None,
+        "sdk": "x402ResourceServer.verify_payment + settle_payment",
+    }
+
+
 async def _verify_and_settle_payment(params: VerifyPaymentInput) -> dict[str, Any]:
-    """Seller revenue path: verify then settle via x402ResourceServer + facilitator."""
-    payload, requirements = _decode_payment_inputs(
-        params.payment_signature, params.payment_required
-    )
-    network = _network_of(requirements)
-    server = _resource_server(network)
-    verify_result = await server.verify_payment(payload, requirements)
+    """Seller revenue path: verify then settle via x402ResourceServer + facilitator.
+
+    Decode/verify failures must return ``is_valid=False``, not raise. A paying
+    agent retries with PAYMENT-SIGNATURE; an uncaught ValidationError used to
+    become HTTP 500 ``internal_error`` (generic handler) instead of a 402
+    ``payment_invalid`` the client can retry.
+    """
+    try:
+        payload, requirements = _decode_payment_inputs(
+            params.payment_signature, params.payment_required
+        )
+    except Exception as exc:  # noqa: BLE001 — malformed wire must 402, not 500
+        logger.warning("payment decode failed: %s", exc)
+        return _invalid_payment_result(f"malformed_payment: {exc}")
+
+    try:
+        network = _network_of(requirements)
+        server = _resource_server(network)
+        verify_result = await server.verify_payment(payload, requirements)
+    except Exception as exc:  # noqa: BLE001 — facilitator/SDK faults
+        logger.warning("payment verify failed: %s", exc)
+        return _invalid_payment_result(f"verify_failed: {exc}")
 
     settlement = None
     settlement_error = None
