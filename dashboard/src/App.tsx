@@ -24,6 +24,7 @@ import { formatUsdcAtomic } from "./utils/usdc";
 import { relativeTime } from "./utils/time";
 
 import { ParallaxProtocolHero } from "./components/ParallaxProtocolHero";
+import { AuthenticityBadge } from "./components/AuthenticityBadge";
 import { FoundationTicker } from "./components/FoundationTicker";
 import { ChainDistributionBar } from "./components/ChainDistributionBar";
 import { FacilitatorLeaderboard } from "./components/FacilitatorLeaderboard";
@@ -269,6 +270,7 @@ export default function App() {
   const paletteActions = useMemo(
     () => [
       { id: "hero", label: "Go to net position", run: () => scrollTo("panel-hero") },
+      { id: "authenticity", label: "Go to protocol authenticity", run: () => scrollTo("panel-authenticity") },
       { id: "wallet", label: "Go to wallet", run: () => scrollTo("panel-wallet") },
       { id: "swarm", label: "Go to swarm activity", run: () => scrollTo("panel-swarm") },
       { id: "os", label: "Go to host OS health", run: () => scrollTo("panel-os") },
@@ -593,6 +595,8 @@ export default function App() {
           <RateSparkline series={rateHistory} />
           <div className="mono">{stats?.agents[0]?.rate_limit_remaining ?? "—"} / min left</div>
         </section>
+
+        <AuthenticityBadge stats={stats} wallet={wallet} />
 
         <ActiveStorefront
           products={products}

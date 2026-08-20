@@ -19,7 +19,21 @@ export type StatsResponse = {
     free_tier_monthly_quota: number;
     pro_tier_price: string;
     x402_default_network: string;
+    has_ownership_proofs?: boolean;
+    ownership_proofs_count?: number;
+    pay_to_address?: string;
   };
+};
+
+export type HealthResponse = {
+  status: string;
+  service: string;
+  x402_facilitator: string;
+  x402_facilitator_network: string;
+  wallet_configured: boolean;
+  stripe_configured: boolean;
+  pay_to_configured: boolean;
+  ownership_proofs_configured?: boolean;
 };
 
 export type DoctorCheck = {
@@ -170,6 +184,7 @@ export type WalletResponse = {
 };
 
 export const api = {
+  health: () => getJson<HealthResponse>("/health"),
   stats: () => getJson<StatsResponse>("/stats"),
   doctor: () => getJson<{ checks: DoctorCheck[]; summary: { ready: boolean; fail?: number } }>("/doctor"),
   ledgerSpend: () => getJson<LedgerRow[]>("/ledger/spend"),

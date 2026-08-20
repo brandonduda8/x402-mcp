@@ -339,6 +339,7 @@ async def health() -> dict:
         "wallet_configured": bool(settings.evm_private_key),
         "stripe_configured": bool(settings.stripe_secret_key),
         "pay_to_configured": bool(settings.x402_pay_to_address),
+        "ownership_proofs_configured": bool(settings.ownership_proofs),
     }
 
 

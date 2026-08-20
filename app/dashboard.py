@@ -170,9 +170,11 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
       <dt>facilitator</dt><dd id="h-facilitator">—</dd>
       <dt>wallet key</dt><dd id="h-wallet">—</dd>
       <dt>poll latency</dt><dd><span id="h-spark" class="spark" aria-hidden="true"></span><span id="h-latency">—</span></dd>
-      <dt>last poll</dt><dd id="h-lastpoll">—</dd>
       <dt>manifest</dt><dd><a href="/.well-known/mcp">/.well-known/mcp</a></dd>
-    </dl>
+      <dt>x402 manifest</dt><dd><a href="/.well-known/x402">/.well-known/x402</a></dd>
+      <dt>agent card</dt><dd><a href="/.well-known/agent-card.json">/.well-known/agent-card.json</a></dd>
+      <dt>agent docs</dt><dd><a href="/llms.txt">/llms.txt</a></dd>
+      <dt>base app id</dt><dd>6a7018e2a8c4f2b6db3b3e71</dd>
   </section>
 
   <section id="p-quota">
