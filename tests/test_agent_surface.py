@@ -66,13 +66,14 @@ def test_the_advertised_endpoints_exist() -> None:
 
     for r in body["resource_details"]:
         path = r["url"].replace(settings.public_base_url.rstrip("/"), "")
-        response = client.get(path)
+        method = r.get("method", "GET")
+        response = client.request(method, path)
         # Paid endpoints answer 402/422/503 unpaid; free ones 200. 404 = rot.
         assert response.status_code != 404, f"{path} advertised but missing"
 
 
 def test_a_bare_probe_of_a_paid_endpoint_gets_the_challenge_not_a_422() -> None:
-    """How every crawler and agent meets us: a GET with no parameters at all.
+    """How every crawler and agent meets us: a probe with no parameters/body.
 
     `/mn/property-check` used to answer 422 here, because FastAPI's validation
     of a required `address` ran before any payment logic. "Expected 402, got
@@ -87,11 +88,12 @@ def test_a_bare_probe_of_a_paid_endpoint_gets_the_challenge_not_a_422() -> None:
 
     for r in paid:
         path = r["url"].replace(settings.public_base_url.rstrip("/"), "")
-        response = client.get(path)  # no query parameters, exactly like a crawler
+        method = r.get("method", "GET")
+        response = client.request(method, path)  # unparameterised probe, exactly like a crawler
         if response.status_code == 503:
             continue  # seller not configured on this box; nothing to sell
         assert response.status_code == 402, (
-            f"{path} answered {response.status_code} to an unparameterised probe; "
+            f"{path} answered {response.status_code} to an unparameterised {method} probe; "
             "a discovery crawler will mark it non-registerable"
         )
         assert "payment-required" in {k.lower() for k in response.headers}, (
@@ -145,3 +147,30 @@ def test_agent_card_skills_track_live_city_prices() -> None:
 def test_llms_txt_advertises_a2a_agent_card() -> None:
     text = client.get("/llms.txt").text
     assert "/.well-known/agent-card.json" in text
+
+
+def test_agents_json_served_at_well_known() -> None:
+    response = client.get("/.well-known/agents.json")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "1.0.0"
+    assert "agents" in body
+    assert len(body["agents"]) >= 3
+    ids = {a["id"] for a in body["agents"]}
+    assert "us-rental-diligence" in ids
+    assert "base-tx-decision" in ids
+    assert "us-city-compliance-network" in ids
+    assert body["payment_networks"] == [settings.x402_default_network]
+    assert body["settlement_address"]
+
+
+def test_mcp_server_card_served_at_well_known() -> None:
+    response = client.get("/.well-known/mcp/server-card.json")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["serverInfo"]["name"] == "io.github.kwizzlesurp10-ctrl/x402-mcp"
+    assert body["transport"]["type"] == "streamable-http"
+    assert body["authentication"]["type"] == "x402"
+    assert "tools" in body
+    assert len(body["tools"]) >= 10
+

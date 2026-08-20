@@ -47,6 +47,8 @@ PUBLIC_FREE_PATHS: tuple[str, ...] = (
     "/llms.txt",
     "/.well-known/x402",
     "/.well-known/mcp",
+    "/.well-known/mcp/server-card.json",
+    "/.well-known/agents.json",
     "/.well-known/agent-card.json",
     "/.well-known/agent.json",
     "/pulse",

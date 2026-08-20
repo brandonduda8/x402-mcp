@@ -356,6 +356,22 @@ async def well_known_x402() -> dict:
     return agent_surface.well_known_x402()
 
 
+@app.get("/.well-known/agents.json")
+async def well_known_agents_json() -> dict:
+    """Standard Agents Registry Manifest (Agentic.Market / Open Agent Registry)."""
+    from app import agent_surface
+
+    return agent_surface.agents_json()
+
+
+@app.get("/.well-known/mcp/server-card.json")
+async def well_known_mcp_server_card() -> dict:
+    """Remote MCP Server Card for Smithery.ai, Glama.ai, and client introspectors."""
+    from app import agent_surface
+
+    return agent_surface.mcp_server_card()
+
+
 @app.get("/.well-known/agent-card.json")
 async def well_known_agent_card() -> dict:
     """A2A Protocol v1.0 Agent Card (ecosystem discovery)."""
