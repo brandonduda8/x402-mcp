@@ -1,5 +1,5 @@
 # Smithery Configuration (https://smithery.ai)
-name: io.github.kwizzlesurp10-ctrl/x402-mcp
+name: kwizzlesurp10/x402-mcp
 version: 0.1.0
 description: "Pay-per-call HTTP APIs and MCP tools over x402 on Base mainnet (US Rental Diligence, Tx Optimizer, City Compliance)."
 remote:
