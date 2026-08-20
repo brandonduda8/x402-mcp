@@ -32,6 +32,48 @@ export type DoctorCheck = {
 
 export type LedgerRow = Record<string, unknown>;
 
+export type CityCatalogItem = {
+  code: string;
+  name: string;
+  state: string;
+  service_name: string;
+  price: string;
+  network: string;
+  paid_url: string;
+  sample_url: string;
+  sample_address: string;
+  sources_label: string;
+  tags: string[];
+  canonical_alias: string | null;
+};
+
+export type CityCatalog = {
+  network: string;
+  price: string;
+  network_caip2?: string;
+  cities: CityCatalogItem[];
+};
+
+export type DemandResource = {
+  resource: string;
+  challenges_served: number;
+  qualified_views: number;
+  sales_settled: number;
+  sales_in_window: number;
+  sales_external: number;
+  sales_operator: number;
+  sales_unknown: number;
+  revenue_usdc?: number;
+};
+
+export type DemandReport = {
+  resources: DemandResource[];
+  total_challenges_served?: number;
+  total_qualified_views?: number;
+  total_sales_external?: number;
+  total_sales_operator?: number;
+};
+
 export type SwarmProduct = {
   product_id: string;
   topic: string;
@@ -137,6 +179,8 @@ export const api = {
   os: () => getJson<OsSnapshot>("/os"),
   swarmProducts: () => getJson<SwarmProduct[]>("/swarm/products"),
   swarmRevenue: () => getJson<SwarmRevenue>("/swarm/revenue"),
+  usCities: () => getJson<CityCatalog>("/us/cities"),
+  demand: () => getJson<DemandReport>("/demand"),
   probe: (url: string, method = "GET") =>
     getJson<Record<string, unknown>>(
       `/probe?url=${encodeURIComponent(url)}&method=${encodeURIComponent(method)}`,

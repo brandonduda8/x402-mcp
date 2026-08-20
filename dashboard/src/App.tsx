@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type DoctorCheck, type LedgerRow, type OsSnapshot, type PulseResponse, type StatsResponse, type SwarmProduct, type SwarmRevenue, type WalletResponse } from "./api/client";
+import { api, type CityCatalogItem, type DemandReport, type DoctorCheck, type LedgerRow, type OsSnapshot, type PulseResponse, type StatsResponse, type SwarmProduct, type SwarmRevenue, type WalletResponse } from "./api/client";
 import { ActiveStorefront } from "./components/ActiveStorefront";
 import { CommandPalette } from "./components/CommandPalette";
 import { OsHealthPanel } from "./components/OsHealthPanel";
@@ -14,7 +14,7 @@ import { SellerWizard } from "./components/SellerWizard";
 import { VirtualizedLedger } from "./components/VirtualizedLedger";
 import { WalletPanel } from "./components/WalletPanel";
 import { OperatorHeader } from "./components/OperatorHeader";
-import { demoActivity, demoDoctor, demoOs, demoRevenue, demoSpend, demoStats } from "./fixtures/demo";
+import { demoActivity, demoCities, demoDemand, demoDoctor, demoOs, demoRevenue, demoSpend, demoStats } from "./fixtures/demo";
 import { explain } from "./glossary";
 import { useSSE, type StreamEvent } from "./hooks/useSSE";
 import { downloadText, ledgerToCsv } from "./utils/ledger";
@@ -58,6 +58,8 @@ export default function App() {
   const [pulse, setPulse] = useState<PulseResponse | null>(null);
   const [os, setOs] = useState<OsSnapshot | null>(null);
   const [products, setProducts] = useState<SwarmProduct[]>([]);
+  const [cities, setCities] = useState<CityCatalogItem[]>([]);
+  const [demand, setDemand] = useState<DemandReport | null>(null);
   const [swarmRevenue, setSwarmRevenue] = useState<SwarmRevenue | null>(null);
   const [activity, setActivity] = useState<StreamEvent[]>([]);
   const [probeDone, setProbeDone] = useState(false);
@@ -81,6 +83,8 @@ export default function App() {
       setSpend(demoSpend);
       setRevenue(demoRevenue);
       setActivity(demoActivity);
+      setCities(demoCities);
+      setDemand(demoDemand);
       setProducts([
         {
           product_id: "demo-1",
@@ -164,7 +168,7 @@ export default function App() {
       return;
     }
     try {
-      const [s, d, sp, rev, w, pr, srev] = await Promise.all([
+      const [s, d, sp, rev, w, pr, srev, cityCatalog, demandReport] = await Promise.all([
         api.stats(),
         api.doctor(),
         api.ledgerSpend(),
@@ -172,6 +176,8 @@ export default function App() {
         api.wallet(),
         api.swarmProducts(),
         api.swarmRevenue(),
+        api.usCities().catch(() => ({ network: "", price: "", cities: [] as CityCatalogItem[] })),
+        api.demand().catch(() => null),
       ]);
       setStats(s);
       setDoctor(d.checks);
@@ -180,6 +186,8 @@ export default function App() {
       setWallet(w);
       setProducts(pr);
       setSwarmRevenue(srev);
+      setCities(cityCatalog.cities ?? []);
+      setDemand(demandReport);
       api.pulse().then(setPulse).catch(() => {});
       api.os().then(setOs).catch(() => {});
       const rateRemaining = s.agents.length
@@ -586,9 +594,15 @@ export default function App() {
           <div className="mono">{stats?.agents[0]?.rate_limit_remaining ?? "—"} / min left</div>
         </section>
 
+        <ActiveStorefront
+          products={products}
+          revenueRows={revenue}
+          cities={cities}
+          demand={demand}
+        />
+
         <div className="hide-mobile" style={{ display: "contents" }}>
           <OsHealthPanel os={os} />
-          <ActiveStorefront products={products} revenueRows={revenue} activityEvents={activity} />
         </div>
 
         <section id="panel-activity" className="panel" style={{ gridColumn: "span 8" }}>
