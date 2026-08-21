@@ -2,7 +2,7 @@
 name: kwizzlesurp10/x402-mcp
 displayName: "x402 Micropayments & Agent ID Cards MCP"
 version: 0.1.0
-description: "Autonomous crypto commerce, property compliance, Base gas optimization, and Agent ID cards MCP server over x402 on Base mainnet."
+description: "The complete autonomous agent economy toolkit. Equip your agents to seamlessly execute USDC micropayments over x402 on Base, run complex property compliance checks across US cities, optimize blockchain gas fees, and leverage Agent ID cards for cross-agent discovery and auditing. A robust, production-ready server that turns passive LLMs into active economic participants."
 homepage: "https://x402-mcp.onrender.com"
 repository: "https://github.com/kwizzlesurp10-ctrl/x402-mcp"
 license: "MIT"

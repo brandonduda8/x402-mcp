@@ -1,7 +1,7 @@
 {
   "name": "x402-mcp",
   "version": "0.1.0",
-  "description": "x402 autonomous crypto commerce, property compliance, and Agent ID cards MCP server",
+  "description": "The complete autonomous agent economy toolkit. Equip your agents to seamlessly execute USDC micropayments over x402 on Base, run complex property compliance checks across US cities, optimize blockchain gas fees, and leverage Agent ID cards for cross-agent discovery and auditing. A robust, production-ready server that turns passive LLMs into active economic participants.",
   "main": "run_stdio.py",
   "keywords": [
     "mcp",
