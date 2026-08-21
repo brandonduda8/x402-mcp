@@ -34,6 +34,10 @@ def emit_tool_event(tool: str, agent_id: str, meta: dict[str, Any]) -> None:
         pass
 
 
+import time
+
+_recent_spends: list[tuple[float, float]] = []
+
 def emit_swarm_step(
     *,
     run_id: str,
@@ -57,6 +61,24 @@ def emit_swarm_step(
         **(detail or {}),
     }
     emit_tool_event(action, agent_id, meta)
+
+    if role == "treasurer" and action == "pay_and_fetch" and detail and detail.get("settled"):
+        amount = float(detail.get("amount_usdc", 0.0))
+        if amount > 0:
+            now = time.monotonic()
+            _recent_spends.append((now, amount))
+            
+            # Prune spends older than 5 minutes (300 seconds)
+            cutoff = now - 300.0
+            _recent_spends[:] = [(t, a) for t, a in _recent_spends if t >= cutoff]
+            
+            total_spend = sum(a for _, a in _recent_spends)
+            if total_spend > 2.00:
+                emit_os_alert(
+                    status="warn",
+                    previous="pass",
+                    concerns=[f"Spend velocity anomaly: ${total_spend:.2f} spent in last 5m"]
+                )
 
 
 def emit_os_alert(*, status: str, previous: str, concerns: list[str]) -> None:

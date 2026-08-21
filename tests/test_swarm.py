@@ -49,6 +49,7 @@ def ledger(tmp_path, monkeypatch):
     ledger_dir.mkdir()
     (ledger_dir / "policy.json").write_text(json.dumps(_POLICY), encoding="utf-8")
     monkeypatch.setattr(ledger_io, "LEDGER", ledger_dir)
+    monkeypatch.setattr("app.ledger_store.ledger_store", None)
     return ledger_dir
 
 
@@ -290,3 +291,35 @@ async def test_revenue_attributed_to_seller_not_buyer(ledger, rails, monkeypatch
     row = ledger_io.read_ledger_rows("revenue")[0]
     assert row["agent_id"] == "seller-agent"  # not the buyer-supplied id
     assert row["run_id"] == run["run_id"]
+@pytest.mark.asyncio
+async def test_autonomous_synthesis(ledger, rails, monkeypatch):
+    from app.swarm import orchestrator
+    
+    # Mock publisher to just return a dummy product
+    async def mock_rebuild():
+        from app.swarm.models import CompositeProduct
+        return CompositeProduct(
+            product_id="pinned-123",
+            topic="Mock Topic",
+            price_usdc=0.0,
+            cost_basis_usdc=0.0,
+            markup=0.0,
+            report="Mock",
+            network="base-sepolia",
+            sources=[]
+        )
+    monkeypatch.setattr("app.swarm.publisher.rebuild_pinned_product", mock_rebuild)
+    
+    # We will patch emit_swarm_step to capture the run
+    captured_run = None
+    def mock_emit(run):
+        nonlocal captured_run
+        captured_run = run
+    monkeypatch.setattr("app.swarm.orchestrator.emit_swarm_step", mock_emit)
+    
+    await orchestrator.run_autonomous_synthesis()
+    
+    assert captured_run is not None
+    assert captured_run.agent_id == "auto-compose"
+    assert captured_run.status == "listed"
+    assert captured_run.product.product_id == "pinned-123"

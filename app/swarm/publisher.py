@@ -88,6 +88,29 @@ def _is_stale(product: CompositeProduct) -> bool:
     return (datetime.now(UTC) - created).total_seconds() > max_age
 
 
+async def rebuild_pinned_product(agent_id: str = _PINNED_SELLER_AGENT_ID) -> CompositeProduct | None:
+    """Force a rebuild of the pinned listing, carrying over existing revenue."""
+    pinned = settings.pinned_pulse_product_id.strip()
+    if not pinned:
+        return None
+
+    existing = swarm_registry.get_product(pinned)
+    try:
+        product = await publish_pulse_product(
+            agent_id=agent_id, product_id=pinned
+        )
+    except Exception:
+        log.exception("pinned listing %s could not be republished", pinned)
+        return existing
+
+    if existing is not None:
+        product.revenue_usdc = existing.revenue_usdc
+        swarm_registry.save()
+
+    swarm_registry.prune_superseded(pinned, PULSE_TOPIC_PREFIX)
+    return product
+
+
 async def restore_pinned_listing() -> CompositeProduct | None:
     """Make sure PINNED_PULSE_PRODUCT_ID is listed and sellable, republishing if not.
 
@@ -114,26 +137,11 @@ async def restore_pinned_listing() -> CompositeProduct | None:
         swarm_registry.prune_superseded(pinned, PULSE_TOPIC_PREFIX)
         return existing
 
-    try:
-        product = await publish_pulse_product(
-            agent_id=_PINNED_SELLER_AGENT_ID, product_id=pinned
-        )
-    except Exception:  # noqa: BLE001 — boot must not fail on a listing rebuild
-        log.exception("pinned listing %s could not be republished", pinned)
-        # A stale listing still sells and still resolves the cataloged URL, so
-        # keep it rather than leaving the URL dead.
-        return existing if sellable else None
-
-    if existing is not None:
-        # The rebuild is a fresh report behind the same id, not a new product —
-        # carry what this listing has already earned across it.
-        product.revenue_usdc = existing.revenue_usdc
-        swarm_registry.save()
-
-    # Republishing onto a fresh id (the manual /pulse/publish escape hatch)
-    # leaves the old row behind; clear anything this listing supersedes so the
-    # storefront shows what is actually for sale.
-    swarm_registry.prune_superseded(pinned, PULSE_TOPIC_PREFIX)
+    # Stale, broken, or gone (ephemeral restart) - force a rebuild.
+    product = await rebuild_pinned_product()
+    # If the rebuild failed, we keep the existing if it is sellable
+    if product is existing and existing is not None and not sellable:
+        return None
 
     log.info(
         "pinned listing %s %s at $%.2f on %s",

@@ -46,3 +46,41 @@ def test_doctor_cli_runs() -> None:
     )
     assert "Doctor" in proc.stdout
     assert "PASS" in proc.stdout or "FAIL" in proc.stdout or "WARN" in proc.stdout
+
+def test_rpc_failover(monkeypatch) -> None:
+    from app.config import settings
+    from app.doctor import run_checks
+    
+    settings.base_rpc_url = "https://broken.rpc.com"
+    
+    # Mock _ping_rpc to fail for broken.rpc.com and pass for llamarpc
+    def mock_ping_rpc(url, **kwargs):
+        if url == "https://broken.rpc.com":
+            return False, "HTTP 500"
+        return True, "HTTP 200"
+        
+    monkeypatch.setattr("app.doctor._ping_rpc", mock_ping_rpc)
+    
+    report = run_checks()
+    rpc_checks = [c for c in report["checks"] if c["id"] == "rpc"]
+    assert len(rpc_checks) == 1
+    assert rpc_checks[0]["status"] == "warn"
+    assert "RPC failover triggered" in rpc_checks[0]["message"]
+    assert settings.base_rpc_url == "https://base.llamarpc.com"
+
+def test_spend_velocity_anomaly(monkeypatch) -> None:
+    from app.ops_events import emit_swarm_step, _recent_spends
+    _recent_spends.clear()
+    
+    alerts = []
+    def mock_emit_os_alert(status, previous, concerns):
+        alerts.append(concerns[0])
+    monkeypatch.setattr("app.ops_events.emit_os_alert", mock_emit_os_alert)
+    
+    # Emit a series of spend events
+    emit_swarm_step(run_id="1", role="treasurer", phase="buying", action="pay_and_fetch", detail={"amount_usdc": 1.0, "settled": True})
+    assert len(alerts) == 0
+    
+    emit_swarm_step(run_id="1", role="treasurer", phase="buying", action="pay_and_fetch", detail={"amount_usdc": 1.5, "settled": True})
+    assert len(alerts) == 1
+    assert "Spend velocity anomaly" in alerts[0]

@@ -45,6 +45,20 @@ def _ping_url(url: str, *, timeout: float = 8.0) -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _ping_rpc(url: str, *, timeout: float = 8.0) -> tuple[bool, str]:
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            response = client.post(
+                url,
+                json={"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []}
+            )
+        if response.status_code < 500:
+            return True, f"HTTP {response.status_code}"
+        return False, f"HTTP {response.status_code}"
+    except Exception as exc:
+        return False, str(exc)
+
+
 def _read_mcp_server_keys() -> dict[str, Any] | None:
     for path in (ROOT / ".mcp.json", ROOT / ".mcp.json.example"):
         if path.exists():
@@ -367,6 +381,24 @@ def run_checks() -> dict[str, Any]:
                 revenue_net,
             )
         )
+
+    # RPC Health & Failover
+    rpc_ok, rpc_msg = _ping_rpc(settings.base_rpc_url)
+    if rpc_ok:
+        checks.append(_check("rpc", "Base RPC", "pass", f"RPC healthy: {settings.base_rpc_url}"))
+    else:
+        # Attempt failover
+        fallback_url = "https://base.llamarpc.com"
+        if settings.base_rpc_url == fallback_url:
+            checks.append(_check("rpc", "Base RPC", "fail", f"Fallback RPC failed: {rpc_msg}", "Check network connection"))
+        else:
+            fb_ok, fb_msg = _ping_rpc(fallback_url)
+            if fb_ok:
+                old_url = settings.base_rpc_url
+                settings.base_rpc_url = fallback_url
+                checks.append(_check("rpc", "Base RPC", "warn", f"RPC failover triggered ({old_url} failed). Swapped to {fallback_url}", "Investigate primary RPC outage"))
+            else:
+                checks.append(_check("rpc", "Base RPC", "fail", f"Both primary and fallback RPC failed", "Check network connection"))
 
     failed = sum(1 for c in checks if c["status"] == "fail")
     warned = sum(1 for c in checks if c["status"] == "warn")

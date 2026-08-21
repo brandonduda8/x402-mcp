@@ -12,7 +12,7 @@ from typing import AsyncIterator, Literal
 
 import httpx
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import (
@@ -1347,6 +1347,27 @@ else:
         app.mount("/mcp", mcp.sse_app())
     except AttributeError:
         pass
+
+@app.post("/swarm/auto-compose", response_model=None)
+async def swarm_auto_compose(request: Request, background_tasks: BackgroundTasks) -> dict:
+    """Autonomous Loop API (Track 2).
+    
+    Triggers a zero-cost composition cycle (updating the pinned product) in the background.
+    """
+    if settings.operator_token:
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {settings.operator_token}":
+            raise HTTPException(status_code=401, detail="unauthorized")
+    
+    if not settings.swarm_enabled or not settings.dashboard_actions:
+        raise HTTPException(
+            status_code=403, 
+            detail="Swarm or dashboard actions are disabled."
+        )
+
+    background_tasks.add_task(swarm_orchestrator.run_autonomous_synthesis)
+    
+    return {"status": "accepted", "message": "Autonomous synthesis cycle dispatched in background."}
 
 # Mission Control hashed Vite assets (JS/CSS). Must be mounted after API routes.
 _mc_assets = _MC_DIST / "assets"

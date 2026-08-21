@@ -319,3 +319,39 @@ async def settle_composite_sale(
         "report": product.report,
         "verification": payment,
     }
+async def run_autonomous_synthesis() -> None:
+    """Execute a scheduled zero-cost background synthesis cycle.
+    
+    Creates a run record, forces a rebuild of the pinned product, and prunes stale records.
+    """
+    from app.swarm import publisher
+    
+    run = SwarmRun(
+        run_id=uuid.uuid4().hex,
+        topic="Crypto Pulse (Autonomous)",
+        agent_id="auto-compose",
+        status="scouting",
+        steps=[],
+        purchases=[],
+        started_ts=_now(),
+    )
+    run.status = "composing"
+    run.steps.append({"role": "archivist", "synthesis": "free-inputs", "why": "autonomous background trigger"})
+    
+    try:
+        product = await publisher.rebuild_pinned_product()
+        if product is not None:
+            product.run_id = run.run_id
+            run.product = product
+            run.status = "listed"
+            log.info("Autonomous synthesis cycle completed successfully. Product ID: %s", product.product_id)
+        else:
+            run.status = "failed"
+            run.error = "rebuild_pinned_product returned None"
+            log.warning("Autonomous synthesis cycle skipped or failed (no pinned product).")
+    except Exception as exc:
+        run.status = "failed"
+        run.error = str(exc)
+        log.exception("Autonomous synthesis cycle failed.")
+        
+    emit_swarm_step(run)
