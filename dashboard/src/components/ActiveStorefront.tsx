@@ -15,6 +15,89 @@ export function ActiveStorefront({
   cities?: CityCatalogItem[];
   demand?: DemandReport | null;
 }) {
+  // Always advertise the public storefront host for copyable Resource URLs.
+  // Mission Control SPA (Vercel) does not proxy /us/* or /mn/* payment paths.
+  const storefrontBase = (
+    import.meta.env.VITE_STOREFRONT_BASE_URL ||
+    "https://x402-mcp.onrender.com"
+  ).replace(/\/$/, "");
+
+  // Base Built-in x402 Endpoints — canonical Visit/Resource trio first
+  const baseCalls: ActiveCall[] = [
+    {
+      id: "call-catalog",
+      name: "US City Compliance Catalog",
+      path: "/us/cities",
+      priceUsdc: 0.0,
+      costBasisUsdc: 0.0,
+      category: "US Compliance Network",
+      views: 240,
+      sales: 0,
+      status: "LIVE FOR SALE",
+    },
+    {
+      id: "call-sea-sample",
+      name: "Seattle Compliance (free sample)",
+      path: "/us/sea/property-check/sample",
+      priceUsdc: 0.0,
+      costBasisUsdc: 0.0,
+      category: "US Compliance Network",
+      views: 160,
+      sales: 0,
+      status: "LIVE FOR SALE",
+    },
+    {
+      id: "call-sea",
+      name: "Seattle Property Compliance (paid example)",
+      path: "/us/sea/property-check",
+      priceUsdc: 0.01,
+      costBasisUsdc: 0.0,
+      category: "US Compliance Network",
+      views: 98,
+      sales: 12,
+      status: "LIVE FOR SALE",
+    },
+    {
+      id: "call-mn",
+      name: "Minneapolis Open-Data Compliance",
+      path: "/mn/property-check",
+      priceUsdc: 0.01,
+      costBasisUsdc: 0.0,
+      category: "Canonical Data",
+      views: 142,
+      sales: 18,
+      status: "LIVE FOR SALE",
+    },
+    {
+      id: "call-nyc",
+      name: "NYC Building & Zoning Snapshot",
+      path: "/us/nyc/property-check",
+      priceUsdc: 0.01,
+      costBasisUsdc: 0.0,
+      category: "US Compliance Network",
+      views: 115,
+      sales: 15,
+      status: "LIVE FOR SALE",
+    },
+    {
+      id: "call-base-pulse",
+      name: "Base Mainnet RPC Pulse Stream",
+      path: "/pulse",
+      priceUsdc: 0.01,
+      costBasisUsdc: 0.0,
+      category: "Canonical Data",
+      views: 210,
+      sales: 34,
+      status: "LIVE FOR SALE",
+    },
+  ];
+
+  // Dynamic Swarm Products
+  const swarmCalls: ActiveCall[] = products.map((p) => {
+    // Count live sales from revenue ledger
+    const matchingSales = revenueRows.filter(
+      (r) => String(r.product_id || "") === p.product_id || String(r.path || "").includes(p.product_id)
+    ).length;
   const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
 
   const allCalls: ActiveCall[] = useMemo(
@@ -131,7 +214,7 @@ export function ActiveStorefront({
       {/* Grid of Active x402 Calls */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
         {filteredCalls.map((call) => {
-          const fullUrl = `${origin}${call.path}`;
+          const fullUrl = `${storefrontBase}${call.path}`;
           const margin = call.priceUsdc - call.costBasisUsdc;
 
           return (
