@@ -122,6 +122,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "tier": "free",
         "requires_env": ["EVM_PRIVATE_KEY"],
     },
+    {
+        "name": "get_agent_card",
+        "description": "Retrieve A2A Protocol v1.0 Agent ID Card and tool capability registry",
+        "tier": "free",
+    },
 )
 
 EXPECTED_TOOL_NAMES: frozenset[str] = frozenset(spec["name"] for spec in TOOL_SPECS)

@@ -1,7 +1,38 @@
 {
   "name": "x402-mcp",
-  "private": true,
+  "version": "0.1.0",
+  "description": "x402 autonomous crypto commerce, property compliance, and Agent ID cards MCP server",
+  "main": "run_stdio.py",
+  "keywords": [
+    "mcp",
+    "x402",
+    "crypto",
+    "ai-agents",
+    "agent-cards",
+    "compliance",
+    "base",
+    "blockchain",
+    "fastmcp",
+    "model-context-protocol",
+    "micropayments",
+    "usdc",
+    "real-estate",
+    "gas-optimizer",
+    "smithery"
+  ],
+  "author": "kwizzlesurp10",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kwizzlesurp10-ctrl/x402-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kwizzlesurp10-ctrl/x402-mcp/issues"
+  },
+  "homepage": "https://github.com/kwizzlesurp10-ctrl/x402-mcp#readme",
   "scripts": {
+    "start": "python run_stdio.py",
+    "test": "pytest",
     "build": "cd dashboard && pnpm install && pnpm run build && cd .. && node -e \"require('fs').copyFileSync('dashboard/dist/index.html', 'index.html'); require('fs').cpSync('dashboard/dist/assets', 'assets', {recursive: true})\""
   }
 }

@@ -27,8 +27,8 @@ def build_mcp_manifest() -> dict:
         "transport": ["stdio", "streamable-http", "sse"],
         "capabilities": {
             "tools": True,
-            "resources": False,
-            "prompts": False,
+            "resources": True,
+            "prompts": True,
         },
         "tools": tools,
         "tiers": {

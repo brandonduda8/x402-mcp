@@ -309,6 +309,24 @@ def agent_card() -> dict[str, Any]:
 
     skills: list[dict[str, Any]] = [
         {
+            "id": "x402-agent-card",
+            "name": "A2A Agent Card & Capabilities Inspector",
+            "description": (
+                "A2A Protocol v1.0 Agent Card and tool capability registry. "
+                "Returns machine-readable identity, supported payment networks, "
+                "pricing models, and skill descriptions. No payment required. "
+                f"MCP tool: get_agent_card. Resource: x402://agent-card. "
+                f"HTTP: GET {base}/.well-known/agent-card.json."
+            ),
+            "tags": ["agent-card", "identity", "a2a", "mcp", "discovery", "free"],
+            "examples": [
+                "Get the agent identity card and supported tool capabilities",
+                f"GET {base}/.well-known/agent-card.json",
+            ],
+            "inputModes": ["text/plain", "application/json"],
+            "outputModes": ["application/json"],
+        },
+        {
             "id": "us-cities-catalog",
             "name": "US City Open-Data Compliance Catalog",
             "description": (
@@ -697,8 +715,8 @@ def mcp_server_card() -> dict[str, Any]:
         },
         "capabilities": {
             "tools": True,
-            "resources": False,
-            "prompts": False,
+            "resources": True,
+            "prompts": True,
         },
         "tools": mcp_manifest["tools"],
         "homepage": base,
