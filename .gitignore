@@ -17,3 +17,6 @@ ledger/*
 !dashboard/.env.production
 .env.buyer
 secrets/
+
+# Teamwork Agent Logs
+.agents/
