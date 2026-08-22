@@ -413,6 +413,12 @@ async def well_known_mcp_server_card() -> dict:
             "name": server_name,
             "version": server_version,
         },
+        "remotes": [
+            {
+                "type": "streamable-http",
+                "url": f"{settings.public_base_url.rstrip('/')}/mcp/mcp",
+            }
+        ],
         "tools": [
             {
                 "name": t.name,

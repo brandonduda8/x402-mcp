@@ -256,6 +256,10 @@ def test_mcp_server_card_endpoint() -> None:
     data = response.json()
     assert "serverInfo" in data
     assert "x402" in data["serverInfo"]["name"]
+    assert "remotes" in data
+    assert len(data["remotes"]) == 1
+    assert data["remotes"][0]["type"] == "streamable-http"
+    assert data["remotes"][0]["url"].endswith("/mcp/mcp")
     assert "tools" in data
     assert len(data["tools"]) == TOOL_COUNT
     for tool in data["tools"]:
