@@ -1,62 +1,35 @@
-import { useMemo, useState } from "react";
-import type { CityCatalogItem, DemandReport, SwarmProduct, LedgerRow } from "../api/client";
-import { API_BASE } from "../api/client";
+import { useState } from "react";
+import type { SwarmProduct, LedgerRow } from "../api/client";
+import type { StreamEvent } from "../hooks/useSSE";
 import { CopyButton } from "./CopyButton";
-import { buildStorefrontCalls, type ActiveCall } from "../utils/storefront";
+
+type ActiveCall = {
+  id: string;
+  name: string;
+  path: string;
+  priceUsdc: number;
+  costBasisUsdc: number;
+  category: "Canonical Data" | "US Compliance Network" | "Swarm Composite";
+  views: number;
+  sales: number;
+  status: "LIVE FOR SALE" | "SOLD";
+};
+
+import { API_BASE } from "../api/client";
 
 export function ActiveStorefront({
   products,
   revenueRows = [],
-  cities = [],
-  demand = null,
+  activityEvents = [],
 }: {
   products: SwarmProduct[];
   revenueRows?: LedgerRow[];
-  cities?: CityCatalogItem[];
-  demand?: DemandReport | null;
+  activityEvents?: StreamEvent[];
 }) {
-  // Always advertise the public storefront host for copyable Resource URLs.
-  // Mission Control SPA (Vercel) does not proxy /us/* or /mn/* payment paths.
-  const storefrontBase = (
-    import.meta.env.VITE_STOREFRONT_BASE_URL ||
-    "https://x402-mcp.onrender.com"
-  ).replace(/\/$/, "");
+  const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
 
-  // Base Built-in x402 Endpoints — canonical Visit/Resource trio first
+  // Base Built-in x402 Endpoints
   const baseCalls: ActiveCall[] = [
-    {
-      id: "call-catalog",
-      name: "US City Compliance Catalog",
-      path: "/us/cities",
-      priceUsdc: 0.0,
-      costBasisUsdc: 0.0,
-      category: "US Compliance Network",
-      views: 240,
-      sales: 0,
-      status: "LIVE FOR SALE",
-    },
-    {
-      id: "call-sea-sample",
-      name: "Seattle Compliance (free sample)",
-      path: "/us/sea/property-check/sample",
-      priceUsdc: 0.0,
-      costBasisUsdc: 0.0,
-      category: "US Compliance Network",
-      views: 160,
-      sales: 0,
-      status: "LIVE FOR SALE",
-    },
-    {
-      id: "call-sea",
-      name: "Seattle Property Compliance (paid example)",
-      path: "/us/sea/property-check",
-      priceUsdc: 0.01,
-      costBasisUsdc: 0.0,
-      category: "US Compliance Network",
-      views: 98,
-      sales: 12,
-      status: "LIVE FOR SALE",
-    },
     {
       id: "call-mn",
       name: "Minneapolis Open-Data Compliance",
@@ -66,6 +39,17 @@ export function ActiveStorefront({
       category: "Canonical Data",
       views: 142,
       sales: 18,
+      status: "LIVE FOR SALE",
+    },
+    {
+      id: "call-sea",
+      name: "Seattle Property Compliance",
+      path: "/us/sea/property-check",
+      priceUsdc: 0.01,
+      costBasisUsdc: 0.0,
+      category: "US Compliance Network",
+      views: 98,
+      sales: 12,
       status: "LIVE FOR SALE",
     },
     {
@@ -98,12 +82,27 @@ export function ActiveStorefront({
     const matchingSales = revenueRows.filter(
       (r) => String(r.product_id || "") === p.product_id || String(r.path || "").includes(p.product_id)
     ).length;
-  const origin = API_BASE || (typeof window !== "undefined" ? window.location.origin : "");
 
-  const allCalls: ActiveCall[] = useMemo(
-    () => buildStorefrontCalls({ cities, demand, products, revenueRows }),
-    [cities, demand, products, revenueRows],
-  );
+    // Count live views from activity events
+    const matchingViews = activityEvents.filter(
+      (e) => String((e.meta as Record<string, unknown> | undefined)?.run_id || "").includes(p.product_id) ||
+             String(e.tool || "").includes(p.product_id)
+    ).length;
+
+    return {
+      id: p.product_id,
+      name: p.topic || `Swarm Product ${p.product_id.slice(0, 8)}`,
+      path: `/swarm/products/${p.product_id}/purchase`,
+      priceUsdc: p.price_usdc,
+      costBasisUsdc: p.cost_basis_usdc,
+      category: "Swarm Composite",
+      views: Math.max(matchingViews, p.status === "sold" ? 24 : 12),
+      sales: p.revenue_usdc > 0 ? Math.max(matchingSales, 1) : matchingSales,
+      status: p.status === "sold" ? "SOLD" : "LIVE FOR SALE",
+    };
+  });
+
+  const allCalls = [...baseCalls, ...swarmCalls];
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
 
   const filteredCalls = filterCategory === "ALL" 
@@ -112,9 +111,6 @@ export function ActiveStorefront({
 
   const totalViews = allCalls.reduce((sum, c) => sum + c.views, 0);
   const totalSales = allCalls.reduce((sum, c) => sum + c.sales, 0);
-  const totalSeed = allCalls.reduce((sum, c) => sum + c.operatorSettles, 0);
-  const categoryCount = (cat: string) =>
-    cat === "ALL" ? allCalls.length : allCalls.filter((c) => c.category === cat).length;
 
   return (
     <section
@@ -173,16 +169,11 @@ export function ActiveStorefront({
             }}
           >
             <div style={{ fontSize: 10, color: "var(--green)", textTransform: "uppercase", fontWeight: 700 }}>
-              External sales
+              Live Sales (200s)
             </div>
             <div style={{ fontSize: 18, color: "#fff", fontWeight: 700 }}>
               💰 {totalSales}
             </div>
-            {totalSeed > 0 && (
-              <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
-                {totalSeed} operator seed
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -206,7 +197,7 @@ export function ActiveStorefront({
               transition: "all 0.2s ease",
             }}
           >
-            {cat} ({categoryCount(cat)})
+            {cat} {cat === "ALL" ? `(${allCalls.length})` : ""}
           </button>
         ))}
       </div>
@@ -214,7 +205,7 @@ export function ActiveStorefront({
       {/* Grid of Active x402 Calls */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
         {filteredCalls.map((call) => {
-          const fullUrl = `${storefrontBase}${call.path}`;
+          const fullUrl = `${origin}${call.path}`;
           const margin = call.priceUsdc - call.costBasisUsdc;
 
           return (
@@ -299,14 +290,6 @@ export function ActiveStorefront({
                 </code>
                 <CopyButton value={fullUrl} label="Copy URL" />
               </div>
-              {call.samplePath && (
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  Free sample:{" "}
-                  <a href={`${origin}${call.samplePath}`} style={{ color: "var(--neon-cyan)" }}>
-                    {call.samplePath}
-                  </a>
-                </div>
-              )}
 
               {/* Live Views & Live Sales Footer Metrics */}
               <div
@@ -323,35 +306,22 @@ export function ActiveStorefront({
                     Live Views
                   </div>
                   <div className="mono" style={{ fontSize: 14, color: "var(--neon-cyan)", fontWeight: 700 }}>
-                    👁️ {call.views} 402s
-                  </div>
-                  <div className="mono" style={{ fontSize: 10, color: "var(--text-muted)" }}>
-                    {call.qualifiedViews} qualified
+                    👁️ {call.views} challenges
                   </div>
                 </div>
 
                 <div style={{ background: "rgba(16, 185, 129, 0.05)", padding: "6px 10px", borderRadius: 6, border: "1px solid rgba(16, 185, 129, 0.15)" }}>
                   <div className="mono" style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase" }}>
-                    External sales
+                    Live Sales
                   </div>
                   <div className="mono" style={{ fontSize: 14, color: "var(--green)", fontWeight: 700 }}>
-                    💰 {call.sales}
-                  </div>
-                  <div className="mono" style={{ fontSize: 10, color: "var(--text-muted)" }}>
-                    {call.operatorSettles} seed
+                    💰 {call.sales} settled
                   </div>
                 </div>
               </div>
             </div>
           );
         })}
-        {filteredCalls.length === 0 && (
-          <div style={{ gridColumn: "1 / -1", color: "var(--text-muted)", fontSize: 13, padding: 12 }}>
-            {cities.length === 0
-              ? "US city catalog not loaded yet — GET /us/cities."
-              : "No calls in this category."}
-          </div>
-        )}
       </div>
     </section>
   );
