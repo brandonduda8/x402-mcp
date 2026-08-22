@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Deployment & Modification Lock
+
+- **Core x402-mcp Lock**: The core `x402-mcp` codebase (specifically selling calls, commerce middleware, tool execution paths, and mainnet API endpoints) is locked. Do not edit core endpoints or selling calls.
+- **Dashboard Isolation**: Editing the React dashboard (`dashboard/`) must never affect or break the deploy status of the main `x402-mcp` API and tools. Build pipelines for the dashboard must be self-contained and run isolated.
+
+
 ## Repo layout note
 
 This directory is nested inside the user's home, which is itself a git repo tracking `x402-mcp` as a gitlink. Always run git commands from `x402-mcp/`, never the parent. `CHANGES.md` is the manifest of in-scope deltas; parent-repo `git status` output is noise.
