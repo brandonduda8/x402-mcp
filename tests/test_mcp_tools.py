@@ -255,10 +255,14 @@ def test_mcp_server_card_endpoint() -> None:
     assert response.status_code == 200
     data = response.json()
     assert "serverInfo" in data
-    assert data["serverInfo"]["name"] == "x402-micropayments"
+    assert "x402" in data["serverInfo"]["name"]
     assert "tools" in data
     assert len(data["tools"]) == TOOL_COUNT
     for tool in data["tools"]:
         assert "name" in tool
         assert "description" in tool
         assert "inputSchema" in tool
+        # Verify schema is simplified (e.g. no anyOf null wrappers)
+        schema = tool["inputSchema"]
+        for prop in schema.get("properties", {}).values():
+            assert "anyOf" not in prop or len(prop["anyOf"]) > 1

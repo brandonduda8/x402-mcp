@@ -363,22 +363,61 @@ async def well_known_agent_card() -> dict:
     return agent_surface.agent_card()
 
 
+def _simplify_schema(schema: Any) -> Any:
+    if not isinstance(schema, dict):
+        return schema
+    new_schema = schema.copy()
+    if "anyOf" in schema:
+        subtypes = [t for t in schema["anyOf"] if isinstance(t, dict) and t.get("type") != "null"]
+        if len(subtypes) == 1:
+            sub = subtypes[0]
+            for k in list(new_schema.keys()):
+                if k not in ("default", "title", "description"):
+                    new_schema.pop(k, None)
+            new_schema.update(_simplify_schema(sub))
+            new_schema.pop("anyOf", None)
+        else:
+            new_schema["anyOf"] = [_simplify_schema(t) for t in schema["anyOf"]]
+    if "properties" in new_schema:
+        new_schema["properties"] = {
+            k: _simplify_schema(v) for k, v in new_schema["properties"].items()
+        }
+    if "items" in new_schema:
+        new_schema["items"] = _simplify_schema(new_schema["items"])
+    return new_schema
+
+
 @app.get("/.well-known/mcp/server-card.json")
 async def well_known_mcp_server_card() -> dict:
     """Smithery-compatible MCP Server Card for static scanning bypass."""
     from app.mcp_server import mcp
+    import pathlib
+    import json
+
+    try:
+        server_json_path = pathlib.Path(__file__).resolve().parents[1] / "server.json"
+        if server_json_path.exists():
+            server_json = json.loads(server_json_path.read_text(encoding="utf-8"))
+            server_name = server_json.get("name", mcp.name)
+            server_version = server_json.get("version", "0.1.0")
+        else:
+            server_name = mcp.name
+            server_version = "0.1.0"
+    except Exception:
+        server_name = mcp.name
+        server_version = "0.1.0"
 
     tools = await mcp.list_tools()
     return {
         "serverInfo": {
-            "name": mcp.name,
-            "version": "0.1.0",
+            "name": server_name,
+            "version": server_version,
         },
         "tools": [
             {
                 "name": t.name,
                 "description": t.description,
-                "inputSchema": t.inputSchema,
+                "inputSchema": _simplify_schema(t.inputSchema),
             }
             for t in tools
         ],
