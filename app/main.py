@@ -413,6 +413,25 @@ async def well_known_mcp_server_card() -> dict:
             "name": server_name,
             "version": server_version,
         },
+        "configSchema": {
+            "type": "object",
+            "properties": {
+                "X402_PAY_TO_ADDRESS": {
+                    "type": "string",
+                    "description": "USDC seller settlement address on Base.",
+                    "x-from": {
+                        "env": "X402_PAY_TO_ADDRESS"
+                    }
+                },
+                "EVM_PRIVATE_KEY": {
+                    "type": "string",
+                    "description": "EVM private key to pay for x402 services.",
+                    "x-from": {
+                        "env": "EVM_PRIVATE_KEY"
+                    }
+                }
+            }
+        },
         "remotes": [
             {
                 "type": "streamable-http",

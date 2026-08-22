@@ -256,6 +256,9 @@ def test_mcp_server_card_endpoint() -> None:
     data = response.json()
     assert "serverInfo" in data
     assert "x402" in data["serverInfo"]["name"]
+    assert "configSchema" in data
+    assert "X402_PAY_TO_ADDRESS" in data["configSchema"]["properties"]
+    assert "EVM_PRIVATE_KEY" in data["configSchema"]["properties"]
     assert "remotes" in data
     assert len(data["remotes"]) == 1
     assert data["remotes"][0]["type"] == "streamable-http"
