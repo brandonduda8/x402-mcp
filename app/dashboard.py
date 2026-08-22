@@ -14,6 +14,14 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="base:app_id" content="6a7018e2a8c4f2b6db3b3e71" />
+<meta name="description" content="x402 Mission Control — Real-time analytics, diagnostics, and A2A discovery catalog for the x402-mcp micropayment node." />
+<meta name="keywords" content="x402, mcp, agents, micropayments, open-data, real-time analytics, compliance, Base network, EIP-3009" />
+<meta property="og:title" content="x402 terminal" />
+<meta property="og:description" content="Real-time analytics, diagnostics, and A2A discovery catalog for the x402-mcp micropayment node." />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="x402 terminal" />
+<meta name="twitter:description" content="Real-time analytics, diagnostics, and A2A discovery catalog for the x402-mcp micropayment node." />
 <title>x402 terminal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -170,11 +178,9 @@ footer{padding:10px 20px;color:var(--faint);font-size:11px;letter-spacing:.06em}
       <dt>facilitator</dt><dd id="h-facilitator">—</dd>
       <dt>wallet key</dt><dd id="h-wallet">—</dd>
       <dt>poll latency</dt><dd><span id="h-spark" class="spark" aria-hidden="true"></span><span id="h-latency">—</span></dd>
+      <dt>last poll</dt><dd id="h-lastpoll">—</dd>
       <dt>manifest</dt><dd><a href="/.well-known/mcp">/.well-known/mcp</a></dd>
-      <dt>x402 manifest</dt><dd><a href="/.well-known/x402">/.well-known/x402</a></dd>
-      <dt>agent card</dt><dd><a href="/.well-known/agent-card.json">/.well-known/agent-card.json</a></dd>
-      <dt>agent docs</dt><dd><a href="/llms.txt">/llms.txt</a></dd>
-      <dt>base app id</dt><dd>6a7018e2a8c4f2b6db3b3e71</dd>
+    </dl>
   </section>
 
   <section id="p-quota">
