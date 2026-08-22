@@ -142,8 +142,22 @@ export function ParallaxProtocolHero() {
               textAlign: "right",
             }}
           >
-            <div style={{ fontSize: "11px", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Volume (30D)
+            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginBottom: 2 }}>
+              <span
+                style={{
+                  fontSize: "8px",
+                  padding: "1px 4px",
+                  borderRadius: "3px",
+                  background: "rgba(245, 158, 11, 0.15)",
+                  color: "#F59E0B",
+                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                }}
+              >
+                Ecosystem Est.
+              </span>
+              <div style={{ fontSize: "11px", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Volume (30D)
+              </div>
             </div>
             <div style={{ fontSize: "22px", fontWeight: 700, color: "#10B981", fontFamily: "var(--font-mono, monospace)" }}>
               $12.4M+

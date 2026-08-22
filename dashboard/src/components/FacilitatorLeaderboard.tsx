@@ -76,8 +76,22 @@ export function FacilitatorLeaderboard({ density }: { density: string }) {
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <div style={{ fontSize: "15px", fontWeight: 600, color: "#F3F4F6" }}>
-            Facilitator Network Leaderboard
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <div style={{ fontSize: "15px", fontWeight: 600, color: "#F3F4F6" }}>
+              Facilitator Network Leaderboard
+            </div>
+            <span
+              style={{
+                fontSize: "9px",
+                padding: "2px 6px",
+                borderRadius: "4px",
+                background: "rgba(245, 158, 11, 0.15)",
+                color: "#F59E0B",
+                border: "1px solid rgba(245, 158, 11, 0.3)",
+              }}
+            >
+              Simulated Reference
+            </span>
           </div>
           <div style={{ fontSize: "12px", color: "#9CA3AF" }}>
             Verified payment facilitators for EVM & Solana settlements

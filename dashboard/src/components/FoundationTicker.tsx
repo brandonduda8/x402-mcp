@@ -51,7 +51,7 @@ export function FoundationTicker() {
             fontWeight: 600,
           }}
         >
-          Linux Foundation x402 Ecosystem
+          Linux Foundation x402 Ecosystem (Reference)
         </span>
       </div>
 
