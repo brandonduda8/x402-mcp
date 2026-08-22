@@ -244,3 +244,25 @@ async def test_create_stripe_checkout_through_mcp_wrapper(
     assert payload["meta"]["agent_id"] == payload["data"]["agent_id"]
     assert payload["data"]["checkout_url"] == "https://checkout.stripe.com/c/pay/cs_mcp"
     assert payload["data"]["purpose"] == "pro_tier_upgrade"
+
+
+def test_mcp_server_card_endpoint() -> None:
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.get("/.well-known/mcp/server-card.json")
+    assert response.status_code == 200
+    data = response.json()
+    assert "serverInfo" in data
+    assert "x402" in data["serverInfo"]["name"]
+    assert "tools" in data
+    assert len(data["tools"]) == TOOL_COUNT
+    for tool in data["tools"]:
+        assert "name" in tool
+        assert "description" in tool
+        assert "inputSchema" in tool
+        # Verify schema is simplified (e.g. no anyOf null wrappers)
+        schema = tool["inputSchema"]
+        for prop in schema.get("properties", {}).values():
+            assert "anyOf" not in prop or len(prop["anyOf"]) > 1
