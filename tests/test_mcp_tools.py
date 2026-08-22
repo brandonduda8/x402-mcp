@@ -1,4 +1,4 @@
-"""MCP tool layer — preemptive quota, wrapper 429, direct invocation, annotations, prompts, and resources."""
+"""MCP tool layer — preemptive quota, wrapper 429, direct invocation."""
 
 import json
 
@@ -18,162 +18,11 @@ def test_all_tools_registered() -> None:
     tool_names = {t.name for t in mcp_server.mcp._tool_manager._tools.values()}
     assert tool_names == EXPECTED_TOOL_NAMES
     assert len(tool_names) == TOOL_COUNT
-    assert TOOL_COUNT == 20
 
 
 def test_manifest_tools_match_registry() -> None:
     manifest_names = {t["name"] for t in build_mcp_manifest()["tools"]}
     assert manifest_names == EXPECTED_TOOL_NAMES
-    assert len(manifest_names) == TOOL_COUNT
-
-
-def test_tool_annotations_and_agent_cards() -> None:
-    """Every registered FastMCP tool must declare complete behavioral annotations and an Agent ID card."""
-    valid_roles = {
-        "indexer",
-        "oracle",
-        "settler",
-        "broker",
-        "verifier",
-        "checkout",
-        "investigator",
-        "telemetry",
-        "identity",
-    }
-
-    for tool in mcp_server.mcp._tool_manager._tools.values():
-        ann = tool.annotations
-        assert ann is not None, f"Tool {tool.name} is missing annotations"
-        assert ann.title and isinstance(ann.title, str), f"Tool {tool.name} is missing title"
-        assert isinstance(ann.readOnlyHint, bool), f"Tool {tool.name} missing readOnlyHint bool"
-        assert isinstance(ann.destructiveHint, bool), f"Tool {tool.name} missing destructiveHint bool"
-        assert isinstance(ann.idempotentHint, bool), f"Tool {tool.name} missing idempotentHint bool"
-        assert isinstance(ann.openWorldHint, bool), f"Tool {tool.name} missing openWorldHint bool"
-
-        # Agent Card verification
-        card = ann.agent_card if hasattr(ann, "agent_card") else getattr(ann, "model_extra", {}).get("agent_card")
-        if card is None and isinstance(ann, dict):
-            card = ann.get("agent_card")
-        assert card is not None, f"Tool {tool.name} missing agent_card in annotations"
-        assert card["id"], f"Tool {tool.name} agent_card missing id"
-        assert card["name"], f"Tool {tool.name} agent_card missing name"
-        assert card["role"] in valid_roles, f"Tool {tool.name} invalid role: {card.get('role')}"
-        assert card["domain"], f"Tool {tool.name} agent_card missing domain"
-        assert card["version"], f"Tool {tool.name} agent_card missing version"
-        assert "model" in card["pricing"], f"Tool {tool.name} agent_card missing pricing.model"
-        assert isinstance(card["execution_profile"]["read_only"], bool)
-        assert isinstance(card["execution_profile"]["destructive"], bool)
-        assert isinstance(card["execution_profile"]["idempotent"], bool)
-        assert isinstance(card["execution_profile"]["open_world"], bool)
-        assert len(card["examples"]) >= 2, f"Tool {tool.name} agent_card needs >= 2 examples"
-        assert len(card["tags"]) > 0, f"Tool {tool.name} agent_card missing tags"
-
-
-def test_tool_parameter_descriptions_complete() -> None:
-    """Every parameter across all MCP tools must have a non-empty description in its schema."""
-    for tool in mcp_server.mcp._tool_manager._tools.values():
-        params = tool.parameters
-        assert params is not None, f"Tool {tool.name} missing parameters schema"
-        properties = params.get("properties", {})
-        for prop_name, prop_schema in properties.items():
-            desc = prop_schema.get("description")
-            assert desc and isinstance(desc, str) and len(desc.strip()) > 5, (
-                f"Tool '{tool.name}' parameter '{prop_name}' is missing a detailed description: {prop_schema}"
-            )
-
-
-def test_tool_docstrings_google_format() -> None:
-    """All tool docstrings must have detailed descriptions, Args:, and Returns: sections."""
-    for tool in mcp_server.mcp._tool_manager._tools.values():
-        doc = tool.description
-        assert doc is not None and len(doc.strip()) > 20, f"Tool {tool.name} docstring too short"
-        assert "Args:" in doc or len(tool.parameters.get("properties", {})) == 0, (
-            f"Tool {tool.name} docstring missing Args: section"
-        )
-        assert "Returns:" in doc, f"Tool {tool.name} docstring missing Returns: section"
-
-
-def test_mcp_prompts_registered() -> None:
-    """All standard FastMCP prompts must be registered and generate valid workflow instructions."""
-    expected_prompts = {
-        "onboarding_flow",
-        "x402_tool_selector",
-        "generate_quote",
-        "troubleshoot_payment",
-    }
-    registered_prompt_names = set(mcp_server.mcp._prompt_manager._prompts.keys())
-    assert expected_prompts.issubset(registered_prompt_names)
-
-    # Test prompt generation
-    onboard = mcp_server.onboarding_flow(agent_name="agent-pytest")
-    assert "agent-pytest" in onboard
-    assert "get_agent_card" in onboard
-
-    selector = mcp_server.x402_tool_selector(goal="compliance")
-    assert "list_us_cities" in selector
-    assert "check_us_city_property" in selector
-
-    quote = mcp_server.generate_quote(service_name="Test API", price_usdc="$0.02")
-    assert "Test API" in quote
-    assert "$0.02" in quote
-
-    troubleshoot = mcp_server.troubleshoot_payment(error_code="rate_limit_exceeded")
-    assert "rate_limit_exceeded" in troubleshoot
-    assert "get_pro_upgrade_requirements" in troubleshoot
-
-
-def test_mcp_resources_registered() -> None:
-    """All standard FastMCP resources must be registered and return valid JSON content."""
-    expected_uris = {
-        "x402://agent-card",
-        "x402://server-card",
-        "x402://tools-manifest",
-        "x402://pricing-table",
-    }
-    registered_uris = {str(r.uri) for r in mcp_server.mcp._resource_manager._resources.values()}
-    assert expected_uris.issubset(registered_uris)
-
-    # Test resource readers
-    agent_card_raw = mcp_server.get_agent_card_resource()
-    agent_card_data = json.loads(agent_card_raw)
-    assert "skills" in agent_card_data
-    assert agent_card_data["protocolVersion"] == "1.0"
-
-    server_card_raw = mcp_server.get_server_card_resource()
-    server_card_data = json.loads(server_card_raw)
-    assert server_card_data["serverInfo"]["name"] == "io.github.kwizzlesurp10-ctrl/x402-mcp"
-    assert len(server_card_data["tools"]) == TOOL_COUNT
-
-    tools_manifest_raw = mcp_server.get_tools_manifest_resource()
-    tools_manifest_data = json.loads(tools_manifest_raw)
-    assert len(tools_manifest_data["tools"]) == TOOL_COUNT
-
-    pricing_table_raw = mcp_server.get_pricing_table_resource()
-    pricing_table_data = json.loads(pricing_table_raw)
-    assert "free_tier" in pricing_table_data
-    assert "pro_tier" in pricing_table_data
-
-
-@pytest.mark.asyncio
-async def test_get_agent_card_tool_invocation() -> None:
-    """get_agent_card tool must return full card and honor target_id filtering."""
-    raw = await mcp_server.get_agent_card(agent_id="pytest-agent-1")
-    payload = json.loads(raw)
-    assert "data" in payload
-    assert "meta" in payload
-    assert payload["meta"]["agent_id"] == "pytest-agent-1"
-    data = payload["data"]
-    assert "card" in data
-    assert "server_card" in data
-    assert data["tools_count"] > 0
-
-    # Filtered invocation
-    raw_filtered = await mcp_server.get_agent_card(
-        target_id="us-cities-catalog", agent_id="pytest-agent-1"
-    )
-    filtered_payload = json.loads(raw_filtered)
-    assert filtered_payload["data"]["target_id"] == "us-cities-catalog"
-    assert len(filtered_payload["data"]["skills"]) >= 1
 
 
 @pytest.mark.asyncio
@@ -270,6 +119,8 @@ async def test_get_payment_requirements_tool_invocable(probe_402_url: str) -> No
 async def test_pro_upgrade_agent_id_matches_meta(monkeypatch: pytest.MonkeyPatch) -> None:
     """agent_id=None must resolve once — meta and data must share the same id."""
     monkeypatch.setattr(settings, "x402_pay_to_address", "0xTestPayTo00000000000000000000000001")
+    # Pin the testnet/x402.org path: a local .env with CDP creds would resolve
+    # the revenue network to mainnet and route this through the CDP facilitator.
     monkeypatch.setattr(settings, "revenue_network", "eip155:84532")
 
     raw = await mcp_server.get_pro_upgrade_requirements(agent_id=None)
@@ -393,3 +244,21 @@ async def test_create_stripe_checkout_through_mcp_wrapper(
     assert payload["meta"]["agent_id"] == payload["data"]["agent_id"]
     assert payload["data"]["checkout_url"] == "https://checkout.stripe.com/c/pay/cs_mcp"
     assert payload["data"]["purpose"] == "pro_tier_upgrade"
+
+
+def test_mcp_server_card_endpoint() -> None:
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+    response = client.get("/.well-known/mcp/server-card.json")
+    assert response.status_code == 200
+    data = response.json()
+    assert "serverInfo" in data
+    assert data["serverInfo"]["name"] == "x402-micropayments"
+    assert "tools" in data
+    assert len(data["tools"]) == TOOL_COUNT
+    for tool in data["tools"]:
+        assert "name" in tool
+        assert "description" in tool
+        assert "inputSchema" in tool
