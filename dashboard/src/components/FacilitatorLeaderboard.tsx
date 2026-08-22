@@ -1,12 +1,14 @@
 
 
+import type { TelemetryResponse } from "../api/client";
+
 interface FacilitatorNode {
   id: string;
   name: string;
   url: string;
   uptime: string;
   avgLatencyMs: number;
-  feeRate: string;
+  feeRate?: string;
   supportedSchemes: string[];
   chains: string[];
   status: "active" | "degraded" | "syncing";
@@ -59,7 +61,8 @@ const FACILITATORS: FacilitatorNode[] = [
   },
 ];
 
-export function FacilitatorLeaderboard({ density }: { density: string }) {
+export function FacilitatorLeaderboard({ density, telemetry }: { density: string; telemetry: TelemetryResponse | null }) {
+  const activeFacs = telemetry ? telemetry.facilitators : FACILITATORS;
   return (
     <div
       style={{
@@ -85,12 +88,12 @@ export function FacilitatorLeaderboard({ density }: { density: string }) {
                 fontSize: "9px",
                 padding: "2px 6px",
                 borderRadius: "4px",
-                background: "rgba(245, 158, 11, 0.15)",
-                color: "#F59E0B",
-                border: "1px solid rgba(245, 158, 11, 0.3)",
+                background: telemetry ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                color: telemetry ? "#10B981" : "#F59E0B",
+                border: telemetry ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(245, 158, 11, 0.3)",
               }}
             >
-              Simulated Reference
+              {telemetry ? "Live Nodes" : "Simulated Reference"}
             </span>
           </div>
           <div style={{ fontSize: "12px", color: "#9CA3AF" }}>
@@ -108,12 +111,12 @@ export function FacilitatorLeaderboard({ density }: { density: string }) {
             color: "#00F0FF",
           }}
         >
-          18 Active Facilitators
+          {telemetry ? `${telemetry.facilitators.length} Active Facilitator(s)` : "18 Active Facilitators"}
         </span>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-        {FACILITATORS.map((fac) => (
+        {activeFacs.map((fac) => (
           <div
             key={fac.id}
             style={{

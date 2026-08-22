@@ -127,6 +127,22 @@ export type WalletResponse = {
   note: string;
 };
 
+export type TelemetryResponse = {
+  total_volume_usdc: number;
+  total_transactions: number;
+  facilitators: Array<{
+    id: string;
+    name: string;
+    url: string;
+    uptime: string;
+    avgLatencyMs: number;
+    supportedSchemes: string[];
+    chains: string[];
+    status: "active" | "degraded" | "syncing";
+  }>;
+  uptime_pct: number;
+};
+
 export const api = {
   stats: () => getJson<StatsResponse>("/stats"),
   doctor: () => getJson<{ checks: DoctorCheck[]; summary: { ready: boolean; fail?: number } }>("/doctor"),
@@ -137,6 +153,7 @@ export const api = {
   os: () => getJson<OsSnapshot>("/os"),
   swarmProducts: () => getJson<SwarmProduct[]>("/swarm/products"),
   swarmRevenue: () => getJson<SwarmRevenue>("/swarm/revenue"),
+  telemetry: () => getJson<TelemetryResponse>("/telemetry"),
   probe: (url: string, method = "GET") =>
     getJson<Record<string, unknown>>(
       `/probe?url=${encodeURIComponent(url)}&method=${encodeURIComponent(method)}`,

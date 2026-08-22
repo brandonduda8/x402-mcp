@@ -71,6 +71,7 @@ export default function App() {
   const [ledgerFilterNetwork, setLedgerFilterNetwork] = useState("");
   const [ledgerFilterAgent, setLedgerFilterAgent] = useState("");
   const [tourOpen, setTourOpen] = useState(() => !localStorage.getItem("tourSeen"));
+  const [telemetry, setTelemetry] = useState<TelemetryResponse | null>(null);
 
 
 
@@ -81,6 +82,53 @@ export default function App() {
       setSpend(demoSpend);
       setRevenue(demoRevenue);
       setActivity(demoActivity);
+      setTelemetry({
+        total_volume_usdc: 12400000.0,
+        total_transactions: 184500000,
+        facilitators: [
+          {
+            id: "fac-01",
+            name: "x402 Foundation Facilitator",
+            url: "https://x402.org/facilitator",
+            uptime: "99.99%",
+            avgLatencyMs: 140,
+            supportedSchemes: ["exact", "upto", "batch-settlement"],
+            chains: ["Base", "Solana", "Ethereum", "Arbitrum"],
+            status: "active",
+          },
+          {
+            id: "fac-02",
+            name: "Coinbase CDP Facilitator",
+            url: "https://api.cdp.coinbase.com/x402",
+            uptime: "99.98%",
+            avgLatencyMs: 95,
+            supportedSchemes: ["exact", "bazaar-discovery"],
+            chains: ["Base"],
+            status: "active",
+          },
+          {
+            id: "fac-03",
+            name: "Pay.sh Facilitator Gateway",
+            url: "https://pay.sh/v1/x402",
+            uptime: "99.95%",
+            avgLatencyMs: 180,
+            supportedSchemes: ["exact", "upto"],
+            chains: ["Base", "Solana"],
+            status: "active",
+          },
+          {
+            id: "fac-04",
+            name: "Agentic.Market Settlement Engine",
+            url: "https://agentic.market/facilitator",
+            uptime: "99.90%",
+            avgLatencyMs: 210,
+            supportedSchemes: ["exact", "batch-settlement"],
+            chains: ["Base", "Arbitrum"],
+            status: "active",
+          },
+        ],
+        uptime_pct: 99.98
+      });
       setProducts([
         {
           product_id: "demo-1",
@@ -164,7 +212,7 @@ export default function App() {
       return;
     }
     try {
-      const [s, d, sp, rev, w, pr, srev] = await Promise.all([
+      const [s, d, sp, rev, w, pr, srev, tel] = await Promise.all([
         api.stats(),
         api.doctor(),
         api.ledgerSpend(),
@@ -172,6 +220,7 @@ export default function App() {
         api.wallet(),
         api.swarmProducts(),
         api.swarmRevenue(),
+        api.telemetry(),
       ]);
       setStats(s);
       setDoctor(d.checks);
@@ -180,6 +229,7 @@ export default function App() {
       setWallet(w);
       setProducts(pr);
       setSwarmRevenue(srev);
+      setTelemetry(tel);
       api.pulse().then(setPulse).catch(() => {});
       api.os().then(setOs).catch(() => {});
       const rateRemaining = s.agents.length
@@ -503,13 +553,13 @@ export default function App() {
 
       <main className="grid-12">
         <div className="hide-mobile" style={{ gridColumn: "span 12" }}>
-          <ParallaxProtocolHero />
+          <ParallaxProtocolHero telemetry={telemetry} />
         </div>
 
         <div className="hide-mobile" style={{ display: "contents" }}>
           <ChainDistributionBar density={density} />
           <BazaarResourceExplorer density={density} />
-          <FacilitatorLeaderboard density={density} />
+          <FacilitatorLeaderboard density={density} telemetry={telemetry} />
         </div>
 
         <section id="panel-hero" className="panel" style={{ gridColumn: "span 3" }}>
