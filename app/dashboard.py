@@ -14,6 +14,14 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="base:app_id" content="6a7018e2a8c4f2b6db3b3e71" />
+<meta name="description" content="x402 Mission Control — Real-time analytics, diagnostics, and A2A discovery catalog for the x402-mcp micropayment node." />
+<meta name="keywords" content="x402, mcp, agents, micropayments, open-data, real-time analytics, compliance, Base network, EIP-3009" />
+<meta property="og:title" content="x402 terminal" />
+<meta property="og:description" content="Real-time analytics, diagnostics, and A2A discovery catalog for the x402-mcp micropayment node." />
+<meta property="og:type" content="website" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="x402 terminal" />
+<meta name="twitter:description" content="Real-time analytics, diagnostics, and A2A discovery catalog for the x402-mcp micropayment node." />
 <title>x402 terminal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

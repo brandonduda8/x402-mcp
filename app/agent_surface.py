@@ -81,7 +81,7 @@ def _us_city_paid_resources(base: str) -> list[dict[str, Any]]:
 def paid_resources() -> list[dict[str, Any]]:
     """Every paid HTTP resource this deployment serves, priced from live config."""
     base = _base()
-    return [
+    res = [
         {
             "url": f"{base}/base/tx-decision",
             "method": "GET",
@@ -160,7 +160,9 @@ def paid_resources() -> list[dict[str, Any]]:
             "params": {},
         },
         *_us_city_paid_resources(base),
-        {
+    ]
+    if settings.x402_pay_to_address:
+        res.append({
             "url": f"{base}/base/finality-check",
             "method": "GET",
             "price": settings.finality_check_price,
@@ -172,8 +174,8 @@ def paid_resources() -> list[dict[str, Any]]:
             "finalized block tags, not a modeled probability. Call after "
             "submitting a tx, when tx-decision answers the question before.",
             "params": {"tx": "0x-prefixed 32-byte transaction hash (required)"},
-        },
-    ]
+        })
+    return res
 
 
 def well_known_x402() -> dict[str, Any]:
@@ -298,6 +300,44 @@ def agent_card() -> dict[str, Any]:
 
     skills: list[dict[str, Any]] = [
         {
+            "id": "base-tx-decision",
+            "name": "Base Transaction Decision",
+            "description": (
+                "Paid recommendation engine to decide whether to submit a Base transaction "
+                "immediately or wait. Returns max fee, priority fee (EIP-1559 gwei), "
+                f"and estimated USD cost. Price: {settings.tx_decision_price} USDC on {network} via x402. "
+                f"HTTP: GET {base}/base/tx-decision."
+            ),
+            "tags": ["base", "transaction", "gas", "fees", "optimizer", "eip-1559", "x402", "usdc"],
+            "examples": [
+                "Should I submit my transaction now or wait?",
+                f"GET {base}/base/tx-decision?gas=usdc&urgency=flexible",
+            ],
+            "inputModes": ["text/plain", "application/json"],
+            "outputModes": ["application/json"],
+        },
+    ]
+    if settings.x402_pay_to_address:
+        skills.append({
+            "id": "base-finality-check",
+            "name": "Base Transaction Finality Check",
+            "description": (
+                "Paid lookup to classify a Base mainnet transaction hash as pending, "
+                "unsafe (sequencer-confirmed), safe (L1-attested), or finalized (L1-finalized) "
+                "from the node's official block tags. "
+                f"Price: {settings.finality_check_price} USDC on {network} via x402. "
+                f"HTTP: GET {base}/base/finality-check."
+            ),
+            "tags": ["base", "transaction", "finality", "settlement", "status", "node-tags", "x402", "usdc"],
+            "examples": [
+                "Check finality status of transaction 0xabc...",
+                f"GET {base}/base/finality-check?tx=0x123...",
+            ],
+            "inputModes": ["text/plain", "application/json"],
+            "outputModes": ["application/json"],
+        })
+    skills.extend([
+        {
             "id": "us-cities-catalog",
             "name": "US City Open-Data Compliance Catalog",
             "description": (
@@ -411,7 +451,7 @@ def agent_card() -> dict[str, Any]:
             "inputModes": ["application/json"],
             "outputModes": ["application/json"],
         },
-    ]
+    ])
 
     for c in cities:
         code = c["code"]
@@ -476,6 +516,26 @@ def agent_card() -> dict[str, Any]:
             },
             {
                 "url": f"{base}/tasks/us-rental-diligence",
+                "protocolBinding": "HTTP+JSON",
+                "protocolVersion": "1.0",
+            },
+            {
+                "url": f"{base}/base/tx-decision",
+                "protocolBinding": "HTTP+JSON",
+                "protocolVersion": "1.0",
+            },
+            {
+                "url": f"{base}/base/finality-check",
+                "protocolBinding": "HTTP+JSON",
+                "protocolVersion": "1.0",
+            },
+            {
+                "url": f"{base}/mn/property-check",
+                "protocolBinding": "HTTP+JSON",
+                "protocolVersion": "1.0",
+            },
+            {
+                "url": f"{base}/pulse",
                 "protocolBinding": "HTTP+JSON",
                 "protocolVersion": "1.0",
             },
