@@ -41,7 +41,7 @@ def _transport_security() -> TransportSecuritySettings:
         allowed.append(public)
         origins.append(f"https://{public}")
     return TransportSecuritySettings(
-        enable_dns_rebinding_protection=True,
+        enable_dns_rebinding_protection=False,
         allowed_hosts=allowed,
         allowed_origins=origins,
     )
