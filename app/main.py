@@ -261,18 +261,45 @@ def _landing_page_html(request: Request) -> str:
     <title>Kwizzle — Agent-to-Agent Commerce & Compliance</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        :root {{
+            --scroll: 0px;
+        }}
         .glow {{
-            box-shadow: 0 0 50px -12px rgba(16, 185, 129, 0.2);
+            box-shadow: 0 0 50px -12px rgba(16, 185, 129, 0.25);
+        }}
+        .bg-grid {{
+            background-size: 40px 40px;
+            background-image: 
+                linear-gradient(to right, rgba(24, 24, 27, 0.8) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(24, 24, 27, 0.8) 1px, transparent 1px);
+        }}
+        /* Parallax Layer Styles */
+        @media (prefers-reduced-motion: no-preference) {{
+            .parallax-bg {{
+                transform: translateY(calc(var(--scroll) * 0.2));
+            }}
+            .parallax-mid {{
+                transform: translateY(calc(var(--scroll) * -0.1));
+            }}
+            .parallax-col-up {{
+                transform: translateY(calc(var(--scroll) * -0.08));
+            }}
+            .parallax-col-down {{
+                transform: translateY(calc(var(--scroll) * 0.08));
+            }}
         }}
     </style>
 </head>
-<body class="bg-zinc-950 text-zinc-100 font-sans min-h-screen flex flex-col justify-between selection:bg-emerald-500 selection:text-zinc-950">
+<body class="bg-zinc-950 text-zinc-100 font-sans min-h-screen flex flex-col justify-between selection:bg-emerald-500 selection:text-zinc-950 overflow-x-hidden">
+    <!-- Parallax Background Grid Layer -->
+    <div class="fixed inset-0 bg-grid pointer-events-none z-0 parallax-bg opacity-70"></div>
+
     <!-- Header -->
-    <header class="border-b border-zinc-800/50 backdrop-blur-md sticky top-0 z-50">
+    <header class="border-b border-zinc-800/40 backdrop-blur-md sticky top-0 z-50 bg-zinc-950/80">
         <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
             <div class="flex items-center gap-2">
                 <span class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">Kwizzle</span>
-                <span class="text-xs px-2 py-0.5 bg-zinc-800 border border-zinc-700 text-zinc-300 rounded-full font-mono">v0.1.0</span>
+                <span class="text-xs px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-full font-mono">v0.1.0</span>
             </div>
             <nav class="flex items-center gap-6 text-sm font-medium text-zinc-400">
                 <a href="#features" class="hover:text-zinc-200 transition-colors">Features</a>
@@ -283,20 +310,20 @@ def _landing_page_html(request: Request) -> str:
     </header>
 
     <!-- Hero Section -->
-    <main class="flex-grow flex flex-col items-center justify-center px-6 py-20 relative overflow-hidden">
-        <!-- Glow background -->
-        <div class="absolute w-[500px] h-[500px] rounded-full bg-emerald-500/10 blur-[120px] top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
+    <main class="flex-grow flex flex-col items-center justify-center px-6 py-24 relative overflow-hidden z-10 min-h-[85vh]">
+        <!-- Glow background element (Parallax Mid) -->
+        <div class="absolute w-[500px] h-[500px] rounded-full bg-emerald-500/10 blur-[130px] top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none parallax-mid"></div>
 
-        <div class="max-w-3xl text-center space-y-8 relative z-10">
-            <h1 class="text-5xl sm:text-6xl font-extrabold tracking-tight leading-tight">
+        <div class="max-w-3xl text-center space-y-8 relative z-20">
+            <h1 class="text-5xl sm:text-7xl font-extrabold tracking-tight leading-tight">
                 Agent-to-Agent Commerce <br />
                 <span class="bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-500 bg-clip-text text-transparent">&amp; Compliance API Gateway</span>
             </h1>
-            <p class="text-lg text-zinc-400 max-w-2xl mx-auto">
+            <p class="text-lg text-zinc-400 max-w-2xl mx-auto leading-relaxed">
                 Kwizzle powers agentic workflows with standardized EIP-5573 / HTTP 402 micropayments on Base, exposing rich city compliance, property search, and automated intelligence.
             </p>
 
-            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
                 <a href="{dashboard_url}" class="w-full sm:w-auto px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-extrabold rounded-xl transition-all duration-200 shadow-xl shadow-emerald-500/20 text-center">
                     Launch Mission Control
                 </a>
@@ -306,7 +333,7 @@ def _landing_page_html(request: Request) -> str:
             </div>
 
             <!-- Live Status Grid -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 bg-zinc-900/50 border border-zinc-800/50 rounded-2xl text-left backdrop-blur-sm mt-16 glow">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl text-left backdrop-blur-md mt-16 glow">
                 <div>
                     <div class="text-xs text-zinc-500 uppercase tracking-wider">Gateway Status</div>
                     <div class="text-sm font-semibold flex items-center gap-2 mt-1">
@@ -330,41 +357,74 @@ def _landing_page_html(request: Request) -> str:
         </div>
     </main>
 
-    <!-- Features Section -->
-    <section id="features" class="border-t border-zinc-900 bg-zinc-900/10 py-20">
+    <!-- Parallax Columns / Features Grid -->
+    <section id="features" class="border-t border-zinc-900 bg-zinc-950/60 py-24 relative z-20 backdrop-blur-sm overflow-hidden">
         <div class="max-w-6xl mx-auto px-6">
-            <h2 class="text-3xl font-extrabold tracking-tight text-center mb-12">Built for the Agent Economy</h2>
-            <div class="grid md:grid-cols-3 gap-8">
-                <!-- Feature 1 -->
-                <div class="p-8 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl hover:border-zinc-700/60 transition-all">
-                    <div class="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center font-bold mb-6">402</div>
-                    <h3 class="text-xl font-bold mb-2">HTTP 402 Micropayments</h3>
-                    <p class="text-zinc-400 text-sm leading-relaxed">
-                        Exposes paid API resources to agents using standardized EIP-5573 capability signatures and instant USDC settlements on Base.
-                    </p>
+            <h2 class="text-4xl font-extrabold tracking-tight text-center mb-4">Built for the Agent Economy</h2>
+            <p class="text-zinc-400 text-center max-w-xl mx-auto mb-16 text-sm">
+                Kwizzle exposes high-fidelity tools structured for instant integration with Claude Code, Cursor, and custom agentic frameworks.
+            </p>
+
+            <div class="grid md:grid-cols-3 gap-8 items-start">
+                <!-- Column 1: Moves Up -->
+                <div class="space-y-6 parallax-col-up">
+                    <div class="p-8 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl glow">
+                        <div class="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-extrabold mb-6">402</div>
+                        <h3 class="text-lg font-bold mb-2">HTTP 402 Micropayments</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">
+                            Exposes paid API resources to agents using standardized EIP-5573 capability signatures and instant USDC settlements on Base.
+                        </p>
+                    </div>
+                    <div class="p-8 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl">
+                        <div class="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-extrabold mb-6">MN</div>
+                        <h3 class="text-lg font-bold mb-2">Minnesota Compliance</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">
+                            Automated municipal code compliance, state building inspections, and property shape checking on demand.
+                        </p>
+                    </div>
                 </div>
-                <!-- Feature 2 -->
-                <div class="p-8 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl hover:border-zinc-700/60 transition-all">
-                    <div class="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center font-bold mb-6">MCP</div>
-                    <h3 class="text-xl font-bold mb-2">Model Context Protocol</h3>
-                    <p class="text-zinc-400 text-sm leading-relaxed">
-                        Fully supports the Model Context Protocol (MCP) standard, enabling seamless, zero-config integration into Claude Code, Cursor, and IDE extensions.
-                    </p>
+
+                <!-- Column 2: Moves Normally -->
+                <div class="space-y-6 pt-0 md:pt-12">
+                    <div class="p-8 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl">
+                        <div class="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-extrabold mb-6">MCP</div>
+                        <h3 class="text-lg font-bold mb-2">Model Context Protocol</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">
+                            Fully supports the Model Context Protocol (MCP) standard, enabling seamless, zero-config integration into Claude Code, Cursor, and IDE extensions.
+                        </p>
+                    </div>
+                    <div class="p-8 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl glow">
+                        <div class="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-extrabold mb-6">A2A</div>
+                        <h3 class="text-lg font-bold mb-2">Agent-to-Agent Discovery</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">
+                            Dynamically exposes available skills and resources based on payment configuration to enable multi-agent collaboration.
+                        </p>
+                    </div>
                 </div>
-                <!-- Feature 3 -->
-                <div class="p-8 bg-zinc-900/40 border border-zinc-800/60 rounded-2xl hover:border-zinc-700/60 transition-all">
-                    <div class="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center font-bold mb-6">EVM</div>
-                    <h3 class="text-xl font-bold mb-2">City Compliance Checkers</h3>
-                    <p class="text-zinc-400 text-sm leading-relaxed">
-                        Out-of-the-box support for municipal property records, automated permit inspection, and localized regulatory data checks.
-                    </p>
+
+                <!-- Column 3: Moves Down -->
+                <div class="space-y-6 parallax-col-down">
+                    <div class="p-8 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl glow">
+                        <div class="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-extrabold mb-6">EVM</div>
+                        <h3 class="text-lg font-bold mb-2">Multi-Chain Settlement</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">
+                            Supports fast execution and checks across localized network chains with secure operator token authorization gates.
+                        </p>
+                    </div>
+                    <div class="p-8 bg-zinc-900/40 border border-zinc-800/40 rounded-2xl">
+                        <div class="w-10 h-10 bg-emerald-500/10 text-emerald-400 rounded-lg flex items-center justify-center font-extrabold mb-6">API</div>
+                        <h3 class="text-lg font-bold mb-2">Restful Controls</h3>
+                        <p class="text-zinc-400 text-xs leading-relaxed">
+                            Includes complete OpenAPI specifications, detailed diagnostic status tools, and real-time environment status.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
     </section>
 
     <!-- Footer -->
-    <footer class="border-t border-zinc-900/80 py-8 bg-zinc-950">
+    <footer class="border-t border-zinc-900 bg-zinc-950 relative z-30 py-8">
         <div class="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between text-sm text-zinc-500">
             <div>&copy; 2026 Kwizzle. All rights reserved.</div>
             <div class="flex items-center gap-6 mt-4 sm:mt-0">
@@ -374,6 +434,14 @@ def _landing_page_html(request: Request) -> str:
             </div>
         </div>
     </footer>
+
+    <!-- Parallax Scroll Listener Script -->
+    <script>
+        window.addEventListener('scroll', () => {{
+            const scrolled = window.pageYOffset;
+            document.documentElement.style.setProperty('--scroll', scrolled + 'px');
+        }}, {{ passive: true }});
+    </script>
 </body>
 </html>
 """
