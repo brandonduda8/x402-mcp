@@ -41,7 +41,7 @@ def _transport_security() -> TransportSecuritySettings:
         allowed.append(public)
         origins.append(f"https://{public}")
     return TransportSecuritySettings(
-        enable_dns_rebinding_protection=False,
+        enable_dns_rebinding_protection=True,
         allowed_hosts=allowed,
         allowed_origins=origins,
     )
@@ -451,3 +451,32 @@ async def check_us_city_property(
 
 async def _sync_result(data: dict[str, Any]) -> dict[str, Any]:
     return data
+
+
+def _simplify_schema(schema: Any) -> Any:
+    if not isinstance(schema, dict):
+        return schema
+    new_schema = schema.copy()
+    if "anyOf" in schema:
+        subtypes = [t for t in schema["anyOf"] if isinstance(t, dict) and t.get("type") != "null"]
+        if len(subtypes) == 1:
+            sub = subtypes[0]
+            for k in list(new_schema.keys()):
+                if k not in ("default", "title", "description"):
+                    new_schema.pop(k, None)
+            new_schema.update(_simplify_schema(sub))
+            new_schema.pop("anyOf", None)
+        else:
+            new_schema["anyOf"] = [_simplify_schema(t) for t in schema["anyOf"]]
+    if "properties" in new_schema:
+        new_schema["properties"] = {
+            k: _simplify_schema(v) for k, v in new_schema["properties"].items()
+        }
+    if "items" in new_schema:
+        new_schema["items"] = _simplify_schema(new_schema["items"])
+    return new_schema
+
+
+# Simplify the parameter schemas of all registered tools to prevent validation errors (status 422) on strict client parsers.
+for tool in mcp._tool_manager._tools.values():
+    tool.parameters = _simplify_schema(tool.parameters)
