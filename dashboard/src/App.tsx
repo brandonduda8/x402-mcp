@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type CityCatalogItem, type DemandReport, type DoctorCheck, type LedgerRow, type OsSnapshot, type PulseResponse, type StatsResponse, type SwarmProduct, type SwarmRevenue, type WalletResponse } from "./api/client";
+import { api, type DoctorCheck, type LedgerRow, type OsSnapshot, type PulseResponse, type StatsResponse, type SwarmProduct, type SwarmRevenue, type WalletResponse } from "./api/client";
 import { ActiveStorefront } from "./components/ActiveStorefront";
 import { CommandPalette } from "./components/CommandPalette";
 import { OsHealthPanel } from "./components/OsHealthPanel";
@@ -14,7 +14,7 @@ import { SellerWizard } from "./components/SellerWizard";
 import { VirtualizedLedger } from "./components/VirtualizedLedger";
 import { WalletPanel } from "./components/WalletPanel";
 import { OperatorHeader } from "./components/OperatorHeader";
-import { demoActivity, demoCities, demoDemand, demoDoctor, demoOs, demoRevenue, demoSpend, demoStats } from "./fixtures/demo";
+import { demoActivity, demoDoctor, demoOs, demoRevenue, demoSpend, demoStats } from "./fixtures/demo";
 import { explain } from "./glossary";
 import { useSSE, type StreamEvent } from "./hooks/useSSE";
 import { downloadText, ledgerToCsv } from "./utils/ledger";
@@ -24,7 +24,6 @@ import { formatUsdcAtomic } from "./utils/usdc";
 import { relativeTime } from "./utils/time";
 
 import { ParallaxProtocolHero } from "./components/ParallaxProtocolHero";
-import { AuthenticityBadge } from "./components/AuthenticityBadge";
 import { FoundationTicker } from "./components/FoundationTicker";
 import { ChainDistributionBar } from "./components/ChainDistributionBar";
 import { FacilitatorLeaderboard } from "./components/FacilitatorLeaderboard";
@@ -50,7 +49,7 @@ function EmptyPanel({ title, action, command }: { title: string; action: string;
 export default function App() {
   const [demo, setDemo] = useState(import.meta.env.VITE_DEMO_DEFAULT === "true");
   const [density, setDensity] = useState<Density>(() => (localStorage.getItem("density") as Density) || "standard");
-  const [wizardOpen, setWizardOpen] = useState(true);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [doctor, setDoctor] = useState<DoctorCheck[]>([]);
   const [spend, setSpend] = useState<LedgerRow[]>([]);
@@ -59,8 +58,6 @@ export default function App() {
   const [pulse, setPulse] = useState<PulseResponse | null>(null);
   const [os, setOs] = useState<OsSnapshot | null>(null);
   const [products, setProducts] = useState<SwarmProduct[]>([]);
-  const [cities, setCities] = useState<CityCatalogItem[]>([]);
-  const [demand, setDemand] = useState<DemandReport | null>(null);
   const [swarmRevenue, setSwarmRevenue] = useState<SwarmRevenue | null>(null);
   const [activity, setActivity] = useState<StreamEvent[]>([]);
   const [probeDone, setProbeDone] = useState(false);
@@ -74,6 +71,7 @@ export default function App() {
   const [ledgerFilterNetwork, setLedgerFilterNetwork] = useState("");
   const [ledgerFilterAgent, setLedgerFilterAgent] = useState("");
   const [tourOpen, setTourOpen] = useState(() => !localStorage.getItem("tourSeen"));
+  const [telemetry, setTelemetry] = useState<TelemetryResponse | null>(null);
 
 
 
@@ -84,8 +82,53 @@ export default function App() {
       setSpend(demoSpend);
       setRevenue(demoRevenue);
       setActivity(demoActivity);
-      setCities(demoCities);
-      setDemand(demoDemand);
+      setTelemetry({
+        total_volume_usdc: 12400000.0,
+        total_transactions: 184500000,
+        facilitators: [
+          {
+            id: "fac-01",
+            name: "x402 Foundation Facilitator",
+            url: "https://x402.org/facilitator",
+            uptime: "99.99%",
+            avgLatencyMs: 140,
+            supportedSchemes: ["exact", "upto", "batch-settlement"],
+            chains: ["Base", "Solana", "Ethereum", "Arbitrum"],
+            status: "active",
+          },
+          {
+            id: "fac-02",
+            name: "Coinbase CDP Facilitator",
+            url: "https://api.cdp.coinbase.com/x402",
+            uptime: "99.98%",
+            avgLatencyMs: 95,
+            supportedSchemes: ["exact", "bazaar-discovery"],
+            chains: ["Base"],
+            status: "active",
+          },
+          {
+            id: "fac-03",
+            name: "Pay.sh Facilitator Gateway",
+            url: "https://pay.sh/v1/x402",
+            uptime: "99.95%",
+            avgLatencyMs: 180,
+            supportedSchemes: ["exact", "upto"],
+            chains: ["Base", "Solana"],
+            status: "active",
+          },
+          {
+            id: "fac-04",
+            name: "Agentic.Market Settlement Engine",
+            url: "https://agentic.market/facilitator",
+            uptime: "99.90%",
+            avgLatencyMs: 210,
+            supportedSchemes: ["exact", "batch-settlement"],
+            chains: ["Base", "Arbitrum"],
+            status: "active",
+          },
+        ],
+        uptime_pct: 99.98
+      });
       setProducts([
         {
           product_id: "demo-1",
@@ -169,7 +212,7 @@ export default function App() {
       return;
     }
     try {
-      const [s, d, sp, rev, w, pr, srev, cityCatalog, demandReport] = await Promise.all([
+      const [s, d, sp, rev, w, pr, srev, tel] = await Promise.all([
         api.stats(),
         api.doctor(),
         api.ledgerSpend(),
@@ -177,8 +220,7 @@ export default function App() {
         api.wallet(),
         api.swarmProducts(),
         api.swarmRevenue(),
-        api.usCities().catch(() => ({ network: "", price: "", cities: [] as CityCatalogItem[] })),
-        api.demand().catch(() => null),
+        api.telemetry(),
       ]);
       setStats(s);
       setDoctor(d.checks);
@@ -187,8 +229,7 @@ export default function App() {
       setWallet(w);
       setProducts(pr);
       setSwarmRevenue(srev);
-      setCities(cityCatalog.cities ?? []);
-      setDemand(demandReport);
+      setTelemetry(tel);
       api.pulse().then(setPulse).catch(() => {});
       api.os().then(setOs).catch(() => {});
       const rateRemaining = s.agents.length
@@ -270,7 +311,6 @@ export default function App() {
   const paletteActions = useMemo(
     () => [
       { id: "hero", label: "Go to net position", run: () => scrollTo("panel-hero") },
-      { id: "authenticity", label: "Go to protocol authenticity", run: () => scrollTo("panel-authenticity") },
       { id: "wallet", label: "Go to wallet", run: () => scrollTo("panel-wallet") },
       { id: "swarm", label: "Go to swarm activity", run: () => scrollTo("panel-swarm") },
       { id: "os", label: "Go to host OS health", run: () => scrollTo("panel-os") },
@@ -303,7 +343,7 @@ export default function App() {
   return (
     <Bubble
       size={30}
-      trail={24}
+      trail={4}
       follow={0.5}
       blend={14}
       speed={2}
@@ -513,13 +553,13 @@ export default function App() {
 
       <main className="grid-12">
         <div className="hide-mobile" style={{ gridColumn: "span 12" }}>
-          <ParallaxProtocolHero />
+          <ParallaxProtocolHero telemetry={telemetry} />
         </div>
 
         <div className="hide-mobile" style={{ display: "contents" }}>
           <ChainDistributionBar density={density} />
           <BazaarResourceExplorer density={density} />
-          <FacilitatorLeaderboard density={density} />
+          <FacilitatorLeaderboard density={density} telemetry={telemetry} />
         </div>
 
         <section id="panel-hero" className="panel" style={{ gridColumn: "span 3" }}>
@@ -596,17 +636,9 @@ export default function App() {
           <div className="mono">{stats?.agents[0]?.rate_limit_remaining ?? "—"} / min left</div>
         </section>
 
-        <AuthenticityBadge stats={stats} wallet={wallet} />
-
-        <ActiveStorefront
-          products={products}
-          revenueRows={revenue}
-          cities={cities}
-          demand={demand}
-        />
-
         <div className="hide-mobile" style={{ display: "contents" }}>
           <OsHealthPanel os={os} />
+          <ActiveStorefront products={products} revenueRows={revenue} activityEvents={activity} />
         </div>
 
         <section id="panel-activity" className="panel" style={{ gridColumn: "span 8" }}>
