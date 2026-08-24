@@ -449,28 +449,22 @@ def _landing_page_html(request: Request) -> str:
 
 @app.get("/", include_in_schema=False, response_class=HTMLResponse)
 async def root(request: Request) -> HTMLResponse:
-    """Serve either the Landing Page or the React Dashboard depending on Host."""
-    host = request.headers.get("host", "").lower()
-    if host.startswith("dashboard.") or "dashboard" in host:
-        return HTMLResponse(
-            _mission_control_html(),
-            headers={
-                "Cache-Control": "no-store",
-                "Content-Security-Policy": (
-                    "default-src 'self'; "
-                    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
-                    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
-                    "font-src 'self' data: https://fonts.gstatic.com; "
-                    "img-src 'self' data: blob: android-webview-video-poster:; "
-                    "connect-src 'self' ws: wss: https://api.stripe.com https://*.render.com; "
-                    "frame-src 'self' https://js.stripe.com https://hooks.stripe.com; "
-                    "object-src 'none';"
-                )
-            }
-        )
+    """Serve the React Mission Control Dashboard."""
     return HTMLResponse(
-        _landing_page_html(request),
-        headers={"Cache-Control": "public, max-age=3600"},
+        _mission_control_html(),
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Security-Policy": (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
+                "font-src 'self' data: https://fonts.gstatic.com; "
+                "img-src 'self' data: blob: android-webview-video-poster:; "
+                "connect-src 'self' ws: wss: https://api.stripe.com https://*.render.com; "
+                "frame-src 'self' https://js.stripe.com https://hooks.stripe.com; "
+                "object-src 'none';"
+            )
+        }
     )
 
 
