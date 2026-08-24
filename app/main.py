@@ -1707,8 +1707,17 @@ if _mcp_http_app is not None:
     app.mount("/mcp", _mcp_http_app)
 
 try:
-    # Always mount the standard SSE app at /mcp/sse for Smithery compatibility
-    app.mount("/mcp-sse", mcp.sse_app())
+    # Always mount the standard SSE app at /mcp-sse for Smithery compatibility
+    _sse = mcp.sse_app()
+    _sse.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
+    app.mount("/mcp-sse", _sse)
 except AttributeError:
     pass
 
