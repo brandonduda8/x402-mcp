@@ -25,6 +25,10 @@ class Settings(BaseSettings):
 
     # Redis-ready: set REDIS_URL to migrate from in-memory stores.
     redis_url: str | None = None
+    
+    # Upstash Advanced Analytics pipeline
+    upstash_redis_rest_url: str | None = None
+    upstash_redis_rest_token: str | None = None
 
     # Buyer (hot) — only used for pay_and_fetch spends. Never use cold receive key here.
     evm_private_key: str | None = None
