@@ -56,10 +56,11 @@ export function Header({
             fontWeight: 600,
             fontSize: "15px",
             letterSpacing: "0.02em",
+            whiteSpace: "nowrap"
           }}
         >
           x402 <span style={{ color: "var(--color-text-muted)" }}>//</span>{" "}
-          mission control
+          dashboard
         </span>
 
         <span className={`chip ${isTestnet ? "chip-testnet" : "chip-mainnet"}`}>

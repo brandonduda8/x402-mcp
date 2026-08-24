@@ -49,7 +49,7 @@ function EmptyPanel({ title, action, command }: { title: string; action: string;
 export default function App() {
   const [demo, setDemo] = useState(import.meta.env.VITE_DEMO_DEFAULT === "true");
   const [density, setDensity] = useState<Density>(() => (localStorage.getItem("density") as Density) || "standard");
-  const [wizardOpen, setWizardOpen] = useState(true);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [doctor, setDoctor] = useState<DoctorCheck[]>([]);
   const [spend, setSpend] = useState<LedgerRow[]>([]);
@@ -343,7 +343,7 @@ export default function App() {
   return (
     <Bubble
       size={30}
-      trail={24}
+      trail={4}
       follow={0.5}
       blend={14}
       speed={2}
