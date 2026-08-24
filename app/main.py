@@ -9,8 +9,11 @@ import time
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import AsyncIterator, Literal
+from datetime import datetime
 
 import httpx
+from upstash_redis import Redis
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -96,12 +99,39 @@ async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
                 await sampler
 
 
+class UpstashAnalyticsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        
+        if request.url.path.startswith("/api/") or request.url.path.startswith("/mcp/"):
+            if settings.upstash_redis_rest_url and settings.upstash_redis_rest_token:
+                asyncio.create_task(self.log_event(request.url.path, response.status_code))
+                
+        return response
+
+    async def log_event(self, path: str, status_code: int):
+        try:
+            redis = Redis(url=settings.upstash_redis_rest_url, token=settings.upstash_redis_rest_token)
+            redis.incr("analytics:total_hits")
+            redis.hincrby("analytics:endpoints", path, 1)
+            redis.hincrby("analytics:status_codes", str(status_code), 1)
+            redis.xadd("x402:stream:logs", {
+                "endpoint": path,
+                "status": status_code,
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.error(f"Failed to log analytics to Upstash: {e}")
+
+
 app = FastAPI(
     title="x402 Micropayments MCP",
     description="MCP server for x402 HTTP micropayments with agent-commerce overlay",
     version="0.1.0",
     lifespan=_lifespan,
 )
+
+app.add_middleware(UpstashAnalyticsMiddleware)
 
 # Dashboard CORS: local Vite only + exact extras (no free-tunnel wildcards).
 def _cors_origins() -> list[str]:

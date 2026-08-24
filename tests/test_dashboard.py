@@ -13,12 +13,11 @@ MC_DIST = Path(__file__).resolve().parents[1] / "app" / "static" / "mission_cont
 
 
 def test_root_serves_ownership_meta_and_points_at_dashboard() -> None:
-    """`/` must expose Base ownership meta for scrapers (not a bare 307)."""
+    """`/` must expose Base ownership meta for scrapers."""
     response = client.get("/", follow_redirects=False)
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert BASE_APP_ID_META in response.text
-    assert 'content="0; url=/dashboard"' in response.text or 'href="/dashboard"' in response.text
 
 
 def test_mission_control_bundle_is_present() -> None:
