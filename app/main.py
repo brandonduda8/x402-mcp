@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from app.commerce import quota_store
 from app.config import settings
 from app.dashboard import DASHBOARD_HTML
+from app.analytics_dashboard import _analytics_html
 from app.doctor import run_checks
 from app import ledger_io
 from app.ledger_io import read_ledger_rows
@@ -693,6 +694,31 @@ async def stats_snapshot() -> dict:
     _stats_cache["time"] = now
     _stats_cache["data"] = data
     return data
+
+@app.get("/analytics-dashboard", include_in_schema=False, response_class=HTMLResponse)
+async def analytics_dashboard() -> HTMLResponse:
+    """Serve the Upstash Real-Time Analytics UI."""
+    return HTMLResponse(_analytics_html())
+
+
+@app.get("/analytics")
+async def get_analytics() -> dict:
+    """Real-time analytics from Upstash Redis Streams/Counters."""
+    if not settings.upstash_redis_rest_url or not settings.upstash_redis_rest_token:
+        return {"error": "Upstash Redis not configured"}
+    try:
+        redis = Redis(url=settings.upstash_redis_rest_url, token=settings.upstash_redis_rest_token)
+        total_hits = redis.get("analytics:total_hits") or 0
+        endpoints = redis.hgetall("analytics:endpoints") or {}
+        status_codes = redis.hgetall("analytics:status_codes") or {}
+        return {
+            "total_hits": int(total_hits),
+            "endpoints": {k: int(v) for k, v in endpoints.items()},
+            "status_codes": {k: int(v) for k, v in status_codes.items()}
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch analytics: {e}")
+        return {"error": "Failed to fetch analytics from Upstash"}
 
 
 @app.get("/events")
