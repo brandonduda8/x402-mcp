@@ -1705,11 +1705,12 @@ async def ops_status() -> dict:
 # Mount MCP Streamable HTTP / SSE transport when available.
 if _mcp_http_app is not None:
     app.mount("/mcp", _mcp_http_app)
-else:
-    try:
-        app.mount("/mcp", mcp.sse_app())
-    except AttributeError:
-        pass
+
+try:
+    # Always mount the standard SSE app at /mcp/sse for Smithery compatibility
+    app.mount("/mcp-sse", mcp.sse_app())
+except AttributeError:
+    pass
 
 # Mission Control hashed Vite assets (JS/CSS). Must be mounted after API routes.
 _mc_assets = _MC_DIST / "assets"
