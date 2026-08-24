@@ -73,7 +73,7 @@ def build_mcp_manifest() -> dict:
             "seller_requirements": "/seller/requirements",
             "stripe_checkout": "/stripe/checkout",
             "stripe_webhook": "/stripe/webhook",
-            "mcp_sse": "/mcp/sse",
+            "mcp_sse": "/mcp/mcp",
         },
-        "connector_url": f"{settings.public_base_url}/mcp/sse",
+        "connector_url": f"{settings.public_base_url}/mcp/mcp",
     }
