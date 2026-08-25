@@ -183,6 +183,22 @@ export type WalletResponse = {
   note: string;
 };
 
+export type TelemetryResponse = {
+  total_volume_usdc: number;
+  total_transactions: number;
+  facilitators: Array<{
+    id: string;
+    name: string;
+    url: string;
+    uptime: string;
+    avgLatencyMs: number;
+    supportedSchemes: string[];
+    chains: string[];
+    status: "active" | "degraded" | "syncing";
+  }>;
+  uptime_pct: number;
+};
+
 export const api = {
   health: () => getJson<HealthResponse>("/health"),
   stats: () => getJson<StatsResponse>("/stats"),
@@ -194,6 +210,7 @@ export const api = {
   os: () => getJson<OsSnapshot>("/os"),
   swarmProducts: () => getJson<SwarmProduct[]>("/swarm/products"),
   swarmRevenue: () => getJson<SwarmRevenue>("/swarm/revenue"),
+  telemetry: () => getJson<TelemetryResponse>("/telemetry"),
   usCities: () => getJson<CityCatalog>("/us/cities"),
   demand: () => getJson<DemandReport>("/demand"),
   probe: (url: string, method = "GET") =>

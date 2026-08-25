@@ -137,6 +137,7 @@ app.add_middleware(UpstashAnalyticsMiddleware)
 # Dashboard CORS: local Vite only + exact extras (no free-tunnel wildcards).
 def _cors_origins() -> list[str]:
     origins = [
+        "https://x402-mission-control.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:5174",

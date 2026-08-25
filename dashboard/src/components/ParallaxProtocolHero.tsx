@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { LiquidCanvasEffect } from "./LiquidCanvasEffect";
+import type { TelemetryResponse } from "../api/client";
 
-export function ParallaxProtocolHero() {
+export function ParallaxProtocolHero({ telemetry }: { telemetry: TelemetryResponse | null }) {
   const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
@@ -142,14 +143,16 @@ export function ParallaxProtocolHero() {
               textAlign: "right",
             }}
           >
-            <div style={{ fontSize: "11px", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-              Volume (30D)
+            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 4, marginBottom: 2 }}>
+              <div style={{ fontSize: "11px", color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Volume (Live)
+              </div>
             </div>
             <div style={{ fontSize: "22px", fontWeight: 700, color: "#10B981", fontFamily: "var(--font-mono, monospace)" }}>
-              $12.4M+
+              ${telemetry ? telemetry.total_volume_usdc.toFixed(4) : "0.0000"}
             </div>
             <div style={{ fontSize: "12px", color: "#6B7280", marginTop: "2px" }}>
-              184.5M+ settled transactions
+              {telemetry ? telemetry.total_transactions : 0} settled transactions
             </div>
           </div>
         </div>
