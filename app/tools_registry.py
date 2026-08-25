@@ -14,111 +14,161 @@ class ToolSpec(TypedDict, total=False):
 
 TOOL_SPECS: tuple[ToolSpec, ...] = (
     {
-        "name": "discover_services",
-        "description": "Discover x402 Bazaar paid HTTP services",
+        "name": "x402.discover",
+        "description": (
+            "Discover paid HTTP APIs in the x402 Bazaar via the facilitator catalog. "
+            "Call this first to find a resource URL, then x402.probe and x402.pay_and_fetch."
+        ),
         "tier": "free",
     },
     {
-        "name": "get_payment_requirements",
-        "description": "Probe URL for HTTP 402 payment requirements",
+        "name": "x402.probe",
+        "description": (
+            "Probe a URL for HTTP 402 PAYMENT-REQUIRED terms using the x402 client SDK. "
+            "Use before x402.pay_and_fetch to inspect price, network, and payTo without spending."
+        ),
         "tier": "free",
     },
     {
-        "name": "pay_and_fetch",
-        "description": "Pay via x402 and fetch protected resource",
+        "name": "x402.pay_and_fetch",
+        "description": (
+            "Pay USDC via x402 and fetch a protected HTTP resource in one call. "
+            "Requires EVM_PRIVATE_KEY on this host; otherwise use x402.probe for a no-spend 402."
+        ),
         "tier": "free",
         "requires_env": ["EVM_PRIVATE_KEY"],
     },
     {
-        "name": "build_seller_requirements",
-        "description": "Build seller payment requirements",
+        "name": "x402.build_seller",
+        "description": (
+            "Build seller-side x402 payment requirements for your own HTTP resource. "
+            "Pass resource_url plus discovery_* fields to catalog the endpoint in Bazaar."
+        ),
         "tier": "free",
         "requires_env": ["X402_PAY_TO_ADDRESS"],
     },
     {
-        "name": "verify_payment_payload",
-        "description": "Verify payment signature via facilitator",
+        "name": "x402.verify",
+        "description": (
+            "Verify an x402 PAYMENT-SIGNATURE against PAYMENT-REQUIRED terms via the facilitator. "
+            "Call after a buyer presents a signature and before releasing paid content."
+        ),
         "tier": "free",
     },
     {
-        "name": "get_supported_networks",
-        "description": "List networks, facilitators, and headers",
+        "name": "x402.networks",
+        "description": (
+            "List supported settlement networks, facilitators, and x402 v2 header names. "
+            "Call when choosing a preferred_network for x402.pay_and_fetch or x402.build_seller."
+        ),
         "tier": "free",
     },
     {
-        "name": "get_pro_upgrade_requirements",
-        "description": "Build x402 payment requirements for Pro tier upgrade",
-        "tier": "free",
-        "requires_env": ["X402_PAY_TO_ADDRESS"],
-    },
-    {
-        "name": "activate_pro_tier",
-        "description": "Verify x402 payment and unlock Pro tier quota",
-        "tier": "free",
-    },
-    {
-        "name": "get_tool_credits_requirements",
-        "description": "Build x402 payment requirements for per-use tool credits",
+        "name": "commerce.pro_requirements",
+        "description": (
+            "Build x402 payment requirements to purchase the Pro quota tier. "
+            "Next: pay those terms, then commerce.activate_pro with the signature."
+        ),
         "tier": "free",
         "requires_env": ["X402_PAY_TO_ADDRESS"],
     },
     {
-        "name": "purchase_tool_credits",
-        "description": "Verify x402 payment and add per-use tool credits",
+        "name": "commerce.activate_pro",
+        "description": (
+            "Verify a Pro-tier x402 payment and unlock Pro quota limits for the agent. "
+            "Call after commerce.pro_requirements and a completed USDC payment."
+        ),
         "tier": "free",
     },
     {
-        "name": "create_stripe_checkout",
-        "description": "Create Stripe Checkout Session for pro tier or tool credits",
+        "name": "commerce.credits_requirements",
+        "description": (
+            "Build x402 payment requirements to buy a pack of per-use MCP tool credits. "
+            "Next: pay those terms, then commerce.purchase_credits with the signature."
+        ),
+        "tier": "free",
+        "requires_env": ["X402_PAY_TO_ADDRESS"],
+    },
+    {
+        "name": "commerce.purchase_credits",
+        "description": (
+            "Verify an x402 payment and add per-use tool credits to the agent. "
+            "Call after commerce.credits_requirements and a completed USDC payment."
+        ),
+        "tier": "free",
+    },
+    {
+        "name": "commerce.stripe_checkout",
+        "description": (
+            "Create a Stripe Checkout Session for Pro tier or tool credits (fiat rail). "
+            "Use when the buyer pays by card instead of USDC; webhook fulfills the grant."
+        ),
         "tier": "free",
         "requires_env": ["STRIPE_SECRET_KEY"],
     },
     {
-        "name": "run_swarm_research",
-        "description": "Run the swarm Agency: buy cheap upstream x402 services, "
-        "compose a composite research report, and list it for resale",
+        "name": "swarm.research",
+        "description": (
+            "Run the swarm agency: compose a research product from free inputs and list it for resale. "
+            "Pass allow_paid_inputs=true only when buying upstream x402 services is intended."
+        ),
         "tier": "free",
         "requires_env": ["EVM_PRIVATE_KEY", "X402_PAY_TO_ADDRESS"],
     },
     {
-        "name": "settle_composite_sale",
-        "description": "Verify + settle a buyer's x402 payment for a listed "
-        "composite product and record the revenue",
+        "name": "swarm.settle",
+        "description": (
+            "Verify and settle a buyer's x402 payment for a listed composite product and record revenue. "
+            "Call with product_id plus PAYMENT-SIGNATURE after the buyer pays."
+        ),
         "tier": "free",
     },
     {
-        "name": "swarm_revenue_report",
-        "description": "Portfolio revenue intelligence: spend, revenue, LTV:CAC, "
-        "margins, per-source profit scores",
+        "name": "swarm.revenue",
+        "description": (
+            "Get swarm portfolio revenue intelligence: spend, revenue, LTV:CAC, margins, per-source scores. "
+            "Call after swarm.research or swarm.settle to inspect realized economics."
+        ),
         "tier": "free",
     },
     {
-        "name": "get_base_pulse",
-        "description": "Live Base Network Pulse: synthesized settlement-conditions "
-        "intelligence from real RPC data (base fee, utilization, USD cost, verdict)",
+        "name": "pulse.base",
+        "description": (
+            "Get live Base Network Pulse: base fee, EIP-1559 projection, utilization, USD settlement cost, verdict. "
+            "Call before settling on Base when you need a settle-now vs hold recommendation."
+        ),
         "tier": "free",
     },
     {
-        "name": "get_os_metrics",
-        "description": "Host OS telemetry: CPU, memory, swap, disk, network, and "
-        "process signals with an ok/warn/critical health verdict",
+        "name": "ops.metrics",
+        "description": (
+            "Get host OS telemetry: CPU, memory, swap, disk, network, and an ok/warn/critical health verdict. "
+            "Call to diagnose this MCP host; set include_processes=true for top memory processes."
+        ),
         "tier": "free",
     },
     {
-        "name": "list_us_cities",
-        "description": "US City Open-Data Compliance Network catalog "
-        "(codes, paid_url, sample_url, golden path)",
+        "name": "city.list",
+        "description": (
+            "List US City Open-Data Compliance Network cities with paid_url, sample_url, and price. "
+            "Call first, then city.sample, then city.check for the paid address lookup."
+        ),
         "tier": "free",
     },
     {
-        "name": "get_us_city_property_sample",
-        "description": "Free fixed-address property compliance sample for one US city",
+        "name": "city.sample",
+        "description": (
+            "Get a free fixed-address property compliance sample for one US city code. "
+            "Use before city.check to validate city_code and response shape without paying."
+        ),
         "tier": "free",
     },
     {
-        "name": "check_us_city_property",
-        "description": "Paid US city property compliance check via x402 "
-        "(pay_and_fetch on /us/{code}/property-check)",
+        "name": "city.check",
+        "description": (
+            "Run a paid US city property compliance check via x402 on the same HTTP resource buyers use. "
+            "Prefer city.sample first. Settles USDC when EVM_PRIVATE_KEY is set; otherwise returns a 402 probe."
+        ),
         "tier": "free",
         "requires_env": ["EVM_PRIVATE_KEY"],
     },

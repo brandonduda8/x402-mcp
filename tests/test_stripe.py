@@ -333,7 +333,7 @@ def test_upgrade_lists_stripe_and_x402(client: TestClient) -> None:
     assert body["stripe"]["checkout_endpoint"] == "/stripe/checkout"
     assert "x402_coinbase" in body
     assert body["x402_coinbase"]["status"] == "alternate_future_rail"
-    assert "get_pro_upgrade_requirements" in body["mcp_tools"]["pro_upgrade_x402"]
+    assert "commerce.pro_requirements" in body["mcp_tools"]["pro_upgrade_x402"]
 
 
 def test_manifest_payment_rails(client: TestClient) -> None:
@@ -341,7 +341,7 @@ def test_manifest_payment_rails(client: TestClient) -> None:
     rails = manifest["payment_rails"]
     assert rails["stripe"]["primary"] is True
     assert rails["x402_coinbase"]["primary"] is False
-    assert "create_stripe_checkout" in rails["stripe"]["initiation"]["mcp_tool"]
+    assert "commerce.stripe_checkout" in rails["stripe"]["initiation"]["mcp_tool"]
     tool_names = {t["name"] for t in manifest["tools"]}
-    assert "create_stripe_checkout" in tool_names
-    assert "get_pro_upgrade_requirements" in tool_names
+    assert "commerce.stripe_checkout" in tool_names
+    assert "commerce.pro_requirements" in tool_names

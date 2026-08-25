@@ -153,8 +153,8 @@ async def test_check_us_city_property_mcp_wrapper_no_wallet(
 
 def test_city_tools_in_registry() -> None:
     for name in (
-        "list_us_cities",
-        "get_us_city_property_sample",
-        "check_us_city_property",
+        "city.list",
+        "city.sample",
+        "city.check",
     ):
         assert name in EXPECTED_TOOL_NAMES

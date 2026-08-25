@@ -38,11 +38,17 @@ def test_localhost_is_still_allowed(public) -> None:
     assert "localhost:*" in s.allowed_hosts
 
 
-def test_a_local_base_url_adds_nothing(monkeypatch) -> None:
+def test_a_local_base_url_still_allows_localhost(monkeypatch) -> None:
     monkeypatch.setattr(settings, "public_base_url", "http://localhost:8402")
 
-    assert _transport_security().allowed_hosts == [
-        "127.0.0.1:*",
-        "localhost:*",
-        "[::1]:*",
-    ]
+    hosts = _transport_security().allowed_hosts
+    assert "127.0.0.1:*" in hosts
+    assert "localhost:*" in hosts
+    assert "[::1]:*" in hosts
+
+
+def test_smithery_hosts_and_origins_are_allowed(public) -> None:
+    s = _transport_security()
+    assert "server.smithery.ai" in s.allowed_hosts
+    assert "x402-mcp--kwizzlesurp10.run.tools" in s.allowed_hosts
+    assert "https://smithery.ai" in s.allowed_origins

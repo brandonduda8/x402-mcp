@@ -9,7 +9,7 @@ Production MCP server for the [x402](https://x402.org) HTTP micropayment protoco
 | Product | Price | What you get |
 |---------|-------|--------------|
 | `GET /mn/property-check?address=…` | $0.01 USDC | Minneapolis rental-compliance snapshot composed from 3 live City of Minneapolis open datasets — the first machine-payable housing-compliance data for agents |
-| `GET /us/{code}/property-check?address=…` | $0.01 USDC | **US City Open-Data Compliance Network** (14 jurisdictions) — same wire protocol; free catalog `/us/cities` + free `/sample`; MCP: `list_us_cities` → `get_us_city_property_sample` → `check_us_city_property` |
+| `GET /us/{code}/property-check?address=…` | $0.01 USDC | **US City Open-Data Compliance Network** (14 jurisdictions) — same wire protocol; free catalog `/us/cities` + free `/sample`; MCP: `city.list` → `city.sample` → `city.check` |
 | `GET /swarm/products/{id}/purchase` | $0.25 USDC | Base Network Pulse: live settlement-conditions intelligence (EIP-1559 math + real RPC + ETH spot), listed with the x402 Bazaar discovery extension |
 
 The public seller host holds **no spend key** — it only verifies and settles inbound payments ([docs/SELLER-STOREFRONT.md](docs/SELLER-STOREFRONT.md)). Roadmap: [ROADMAP.md](ROADMAP.md).
@@ -18,7 +18,7 @@ The public seller host holds **no spend key** — it only verifies and settles i
 
 - **19 MCP tools** for buyer, seller, Stripe fiat, x402 commerce, swarm-agency, US city compliance, and ops-monitoring flows — canonical inventory in `app/tools_registry.py` (single source for README, `/.well-known/mcp`, and tests); guarded by `tests/test_readme.py` and `tests/test_manifest.py`
 - **x402/Coinbase rail** (primary): x402 v2 wire format end to end — challenge generation, verify + settle via the CDP facilitator on Base mainnet, Bazaar discoverability on listings
-- **Stripe payment rail** (fiat alternative): `create_stripe_checkout` + `POST /stripe/checkout` + `POST /stripe/webhook` for card/bank payments
+- **Stripe payment rail** (fiat alternative): `commerce.stripe_checkout` + `POST /stripe/checkout` + `POST /stripe/webhook` for card/bank payments
 - **Commerce overlay:** 500 calls/month, 10/min rate limit, `meta` envelope on every response
 - **FastMCP** + **FastAPI** with `/.well-known/mcp` manifest
 - **stdio** (Cursor/Grok local) and **HTTP/SSE** (remote connector) transports
@@ -76,27 +76,45 @@ data are intentionally never served. Public records, as-is; not legal advice.
 
 ## MCP Tools
 
+Tool names use domain.action trees so clients can route `x402.*`, `commerce.*`, `swarm.*`, `pulse.*`, `ops.*`, and `city.*`.
+
 | Tool | Description |
 |------|-------------|
-| `discover_services` | Query x402 Bazaar for paid HTTP APIs |
-| `get_payment_requirements` | Probe URL for `PAYMENT-REQUIRED` on 402 |
-| `pay_and_fetch` | Auto-pay and fetch protected resource |
-| `build_seller_requirements` | Build seller payment requirements |
-| `verify_payment_payload` | Verify payment via facilitator |
-| `get_supported_networks` | Networks, facilitators, v2 headers |
-| `get_pro_upgrade_requirements` | Build x402 payment requirements for Pro tier upgrade |
-| `activate_pro_tier` | Verify x402 payment and unlock Pro tier quota |
-| `get_tool_credits_requirements` | Build x402 payment requirements for per-use tool credits |
-| `purchase_tool_credits` | Verify x402 payment and add per-use tool credits |
-| `create_stripe_checkout` | Create Stripe Checkout Session for pro tier or credits |
-| `run_swarm_research` | Swarm Agency: buy cheap upstream x402 services, compose a research report, list it for resale |
-| `settle_composite_sale` | Verify + settle a buyer's payment for a listed composite and record revenue |
-| `swarm_revenue_report` | Portfolio revenue intelligence: spend, revenue, LTV:CAC, margins, per-source profit scores |
-| `get_base_pulse` | Live Base Network Pulse: synthesized settlement-conditions intelligence (base fee, utilization, USD cost, verdict) from real RPC data |
-| `get_os_metrics` | Host OS telemetry: CPU, memory, swap, disk, network, and process signals with an ok/warn/critical health verdict |
-| `list_us_cities` | Free US City Open-Data Compliance catalog (codes, paid_url, sample_url, MCP golden path) |
-| `get_us_city_property_sample` | Free fixed-address property compliance sample for one city code |
-| `check_us_city_property` | Paid city property compliance via x402 (same HTTP resource external buyers use) |
+| `x402.discover` | Query x402 Bazaar for paid HTTP APIs |
+| `x402.probe` | Probe URL for `PAYMENT-REQUIRED` on 402 |
+| `x402.pay_and_fetch` | Auto-pay and fetch protected resource |
+| `x402.build_seller` | Build seller payment requirements |
+| `x402.verify` | Verify payment via facilitator |
+| `x402.networks` | Networks, facilitators, v2 headers |
+| `commerce.pro_requirements` | Build x402 payment requirements for Pro tier upgrade |
+| `commerce.activate_pro` | Verify x402 payment and unlock Pro tier quota |
+| `commerce.credits_requirements` | Build x402 payment requirements for per-use tool credits |
+| `commerce.purchase_credits` | Verify x402 payment and add per-use tool credits |
+| `commerce.stripe_checkout` | Create Stripe Checkout Session for pro tier or credits |
+| `swarm.research` | Swarm Agency: compose a research report and list it for resale |
+| `swarm.settle` | Verify + settle a buyer's payment for a listed composite and record revenue |
+| `swarm.revenue` | Portfolio revenue intelligence: spend, revenue, LTV:CAC, margins, per-source profit scores |
+| `pulse.base` | Live Base Network Pulse: synthesized settlement-conditions intelligence (base fee, utilization, USD cost, verdict) from real RPC data |
+| `ops.metrics` | Host OS telemetry: CPU, memory, swap, disk, network, and process signals with an ok/warn/critical health verdict |
+| `city.list` | Free US City Open-Data Compliance catalog (codes, paid_url, sample_url, MCP golden path) |
+| `city.sample` | Free fixed-address property compliance sample for one city code |
+| `city.check` | Paid city property compliance via x402 (same HTTP resource external buyers use) |
+
+## Installation
+
+### Smithery
+
+[Install via Smithery](https://smithery.ai/servers/kwizzlesurp10/x402-mcp)
+
+Remote Streamable HTTP (no install): `https://x402-mcp.onrender.com/mcp/mcp`
+
+```bash
+smithery mcp add https://x402-mcp.onrender.com/mcp/mcp --id x402-mcp
+```
+
+### Usage
+
+Connect an MCP client to Streamable HTTP `/mcp/mcp`. Call `x402.discover` then `x402.probe` then `x402.pay_and_fetch` for paid APIs; `city.list` → `city.sample` → `city.check` for US property compliance.
 
 ## Environment
 

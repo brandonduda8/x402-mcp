@@ -147,13 +147,28 @@ def _cors_origins() -> list[str]:
     return origins
 
 
-_cors_methods = ["GET", "POST"] if settings.dashboard_actions else ["GET"]
+# MCP Streamable HTTP is POST + CORS preflight. Restricting methods to GET
+# when DASHBOARD_ACTIONS is off blocked Smithery/browser MCP clients.
+_cors_methods = ["GET", "POST", "DELETE", "OPTIONS", "HEAD"]
+if settings.dashboard_actions and "POST" not in _cors_methods:
+    _cors_methods.append("POST")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins(),
+    allow_origins=_cors_origins()
+    + [
+        "https://smithery.ai",
+        "https://www.smithery.ai",
+        "https://server.smithery.ai",
+    ],
     allow_methods=_cors_methods,
     allow_headers=["*"],
-    expose_headers=["PAYMENT-REQUIRED", "PAYMENT-RESPONSE", "PAYMENT-SIGNATURE"],
+    expose_headers=[
+        "PAYMENT-REQUIRED",
+        "PAYMENT-RESPONSE",
+        "PAYMENT-SIGNATURE",
+        "Mcp-Session-Id",
+        "Last-Event-Id",
+    ],
 )
 
 _LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "0.0.0.0", "[::1]", "::1")
@@ -655,11 +670,30 @@ async def well_known_mcp_server_card() -> dict:
                 "name": t.name,
                 "description": t.description,
                 "inputSchema": _simplify_schema(t.inputSchema),
+                **(
+                    {"annotations": t.annotations.model_dump(exclude_none=True)}
+                    if getattr(t, "annotations", None)
+                    else {}
+                ),
             }
             for t in tools
         ],
-        "resources": [],
-        "prompts": [],
+        "resources": [
+            {
+                "uri": str(r.uri),
+                "name": r.name,
+                "description": r.description,
+                "mimeType": r.mimeType,
+            }
+            for r in await mcp.list_resources()
+        ],
+        "prompts": [
+            {
+                "name": p.name,
+                "description": p.description,
+            }
+            for p in await mcp.list_prompts()
+        ],
     }
 
 
@@ -1127,9 +1161,9 @@ async def upgrade_info() -> dict:
         "stripe": {
             "checkout_endpoint": "/stripe/checkout",
             "webhook_endpoint": "/stripe/webhook",
-            "mcp_tool": "create_stripe_checkout",
+            "mcp_tool": "commerce.stripe_checkout",
             "flow": [
-                "1. POST /stripe/checkout or call create_stripe_checkout (MCP)",
+                "1. POST /stripe/checkout or call commerce.stripe_checkout (MCP)",
                 "2. Redirect buyer to checkout_url and complete payment",
                 "3. Stripe webhook POST /stripe/webhook fulfills pro tier or credits",
             ],
@@ -1139,24 +1173,24 @@ async def upgrade_info() -> dict:
             "facilitator_url": settings.x402_facilitator_url,
             "discovery_url": settings.cdp_discovery_url,
             "flow": [
-                "1. Call get_pro_upgrade_requirements or get_tool_credits_requirements (MCP)",
+                "1. Call commerce.pro_requirements or commerce.credits_requirements (MCP)",
                 "2. Pay via x402 wallet using returned requirements",
-                "3. Call activate_pro_tier or purchase_tool_credits with PAYMENT-SIGNATURE",
+                "3. Call commerce.activate_pro or commerce.purchase_credits with PAYMENT-SIGNATURE",
             ],
         },
         "tool_credits": {
             "pack_size": settings.tool_credit_pack_size,
             "pack_price": settings.tool_credit_pack_price,
-            "stripe_tool": "create_stripe_checkout",
-            "x402_payment_tool": "get_tool_credits_requirements",
-            "x402_purchase_tool": "purchase_tool_credits",
+            "stripe_tool": "commerce.stripe_checkout",
+            "x402_payment_tool": "commerce.credits_requirements",
+            "x402_purchase_tool": "commerce.purchase_credits",
         },
         "mcp_tools": {
-            "stripe": ["create_stripe_checkout"],
-            "pro_upgrade_x402": ["get_pro_upgrade_requirements", "activate_pro_tier"],
+            "stripe": ["commerce.stripe_checkout"],
+            "pro_upgrade_x402": ["commerce.pro_requirements", "commerce.activate_pro"],
             "tool_credits_x402": [
-                "get_tool_credits_requirements",
-                "purchase_tool_credits",
+                "commerce.credits_requirements",
+                "commerce.purchase_credits",
             ],
         },
         "manifest": "/.well-known/mcp",
@@ -1702,21 +1736,24 @@ async def ops_status() -> dict:
     }
 
 
+_MCP_CORS = dict(
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS", "HEAD"],
+    allow_headers=["*"],
+    expose_headers=["Mcp-Session-Id", "Last-Event-Id"],
+)
+
 # Mount MCP Streamable HTTP / SSE transport when available.
 if _mcp_http_app is not None:
+    _mcp_http_app.add_middleware(CORSMiddleware, **_MCP_CORS)
     app.mount("/mcp", _mcp_http_app)
 
 try:
-    # Always mount the standard SSE app at /mcp-sse for Smithery compatibility
+    # Legacy SSE mount. Smithery and MCP clients should use Streamable HTTP
+    # at /mcp/mcp — POST to /mcp-sse/sse is 405 by protocol.
     _sse = mcp.sse_app()
-    _sse.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-    )
+    _sse.add_middleware(CORSMiddleware, **_MCP_CORS)
     app.mount("/mcp-sse", _sse)
 except AttributeError:
     pass

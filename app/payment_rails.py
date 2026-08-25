@@ -13,7 +13,7 @@ def build_payment_rails() -> dict:
             "description": "Fiat card/bank payments via Stripe Checkout",
             "initiation": {
                 "http": "POST /stripe/checkout",
-                "mcp_tool": "create_stripe_checkout",
+                "mcp_tool": "commerce.stripe_checkout",
             },
             "webhook": "/stripe/webhook",
             "requires_env": ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
@@ -27,12 +27,12 @@ def build_payment_rails() -> dict:
             ),
             "initiation": {
                 "pro_upgrade": [
-                    "get_pro_upgrade_requirements",
-                    "activate_pro_tier",
+                    "commerce.pro_requirements",
+                    "commerce.activate_pro",
                 ],
                 "tool_credits": [
-                    "get_tool_credits_requirements",
-                    "purchase_tool_credits",
+                    "commerce.credits_requirements",
+                    "commerce.purchase_credits",
                 ],
             },
             "facilitator_url": settings.x402_facilitator_url,
