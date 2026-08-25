@@ -60,7 +60,7 @@ async def _call_stdio_tool(
 @pytest.mark.asyncio
 async def test_stdio_get_supported_networks() -> None:
     payload = await _call_stdio_tool(
-        "get_supported_networks",
+        "x402.networks",
         {"agent_id": "stdio-smoke-agent"},
     )
 
@@ -73,7 +73,7 @@ async def test_stdio_get_supported_networks() -> None:
 @pytest.mark.asyncio
 async def test_stdio_get_payment_requirements(probe_402_url: str) -> None:
     payload = await _call_stdio_tool(
-        "get_payment_requirements",
+        "x402.probe",
         {
             "url": probe_402_url,
             "agent_id": "stdio-probe-agent",
@@ -88,7 +88,7 @@ async def test_stdio_get_payment_requirements(probe_402_url: str) -> None:
 @pytest.mark.asyncio
 async def test_stdio_get_pro_upgrade_requirements() -> None:
     payload = await _call_stdio_tool(
-        "get_pro_upgrade_requirements",
+        "commerce.pro_requirements",
         {},
         env={
             "X402_PAY_TO_ADDRESS": "0xTestPayTo00000000000000000000000001",
@@ -104,7 +104,7 @@ async def test_stdio_get_pro_upgrade_requirements() -> None:
 @pytest.mark.asyncio
 async def test_stdio_get_tool_credits_requirements() -> None:
     payload = await _call_stdio_tool(
-        "get_tool_credits_requirements",
+        "commerce.credits_requirements",
         {"credits": 25},
         env={
             "X402_PAY_TO_ADDRESS": "0xTestPayTo00000000000000000000000001",
@@ -133,17 +133,17 @@ async def test_stdio_quota_exceeded_includes_upgrade_tools() -> None:
             await session.initialize()
             for _ in range(3):
                 await _call_stdio_tool(
-                    "get_supported_networks",
+                    "x402.networks",
                     {"agent_id": agent},
                     session=session,
                 )
             payload = await _call_stdio_tool(
-                "get_supported_networks",
+                "x402.networks",
                 {"agent_id": agent},
                 session=session,
             )
 
     assert payload.get("error") is not None
     assert payload["error"]["error"] == "monthly_quota_exceeded"
-    assert payload["error"]["purchase_credits_tool"] == "purchase_tool_credits"
-    assert payload["error"]["credits_payment_tool"] == "get_tool_credits_requirements"
+    assert payload["error"]["purchase_credits_tool"] == "commerce.purchase_credits"
+    assert payload["error"]["credits_payment_tool"] == "commerce.credits_requirements"

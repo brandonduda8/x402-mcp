@@ -220,10 +220,10 @@ class InMemoryQuotaStore:
                     "quota_remaining": 0,
                     "tool_credits_remaining": 0,
                     "upgrade_url": settings.upgrade_url,
-                    "upgrade_payment_tool": "get_pro_upgrade_requirements",
-                    "activate_tool": "activate_pro_tier",
-                    "credits_payment_tool": "get_tool_credits_requirements",
-                    "purchase_credits_tool": "purchase_tool_credits",
+                    "upgrade_payment_tool": "commerce.pro_requirements",
+                    "activate_tool": "commerce.activate_pro",
+                    "credits_payment_tool": "commerce.credits_requirements",
+                    "purchase_credits_tool": "commerce.purchase_credits",
                     "retry_after": self._seconds_until_next_month(),
                 }
             )
@@ -237,8 +237,8 @@ class InMemoryQuotaStore:
                     "tier": tier,
                     "rate_limit_remaining": 0,
                     "upgrade_url": settings.upgrade_url,
-                    "upgrade_payment_tool": "get_pro_upgrade_requirements",
-                    "activate_tool": "activate_pro_tier",
+                    "upgrade_payment_tool": "commerce.pro_requirements",
+                    "activate_tool": "commerce.activate_pro",
                     "retry_after": retry_after,
                 }
             )
@@ -311,9 +311,6 @@ class InMemoryQuotaStore:
                 "x402_default_network": settings.x402_default_network,
                 "has_pay_to": bool(settings.x402_pay_to_address),
                 "has_buyer_key": bool(settings.evm_private_key),
-                "has_ownership_proofs": bool(settings.ownership_proofs),
-                "ownership_proofs_count": len([p for p in settings.ownership_proofs.split(",") if p.strip()]),
-                "pay_to_address": settings.x402_pay_to_address,
                 "redis_mode": self.mode,  # actual live store, not the env var
                 "network": settings.x402_default_network,
                 "stripe_configured": bool(settings.stripe_secret_key),

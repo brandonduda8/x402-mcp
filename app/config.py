@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     port: int = 8402
     upgrade_url: str = "http://localhost:8402/upgrade"
     public_base_url: str = "http://localhost:8402"
+    # Extra Host header values for MCP DNS-rebinding protection (comma-separated).
+    mcp_allowed_hosts: str = ""
+    # Extra Origin header values for MCP DNS-rebinding protection (comma-separated).
+    mcp_allowed_origins: str = ""
 
     free_tier_monthly_quota: int = 500
     free_tier_rate_limit_per_min: int = 10

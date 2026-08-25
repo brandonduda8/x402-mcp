@@ -27,8 +27,8 @@ def build_mcp_manifest() -> dict:
         "transport": ["stdio", "streamable-http", "sse"],
         "capabilities": {
             "tools": True,
-            "resources": False,
-            "prompts": False,
+            "resources": True,
+            "prompts": True,
         },
         "tools": tools,
         "tiers": {
@@ -44,7 +44,7 @@ def build_mcp_manifest() -> dict:
                 "price_usd": 29,
                 "price_x402": settings.pro_tier_price,
                 "upgrade_url": settings.upgrade_url,
-                "payment_tools": ["get_pro_upgrade_requirements", "activate_pro_tier"],
+                "payment_tools": ["commerce.pro_requirements", "commerce.activate_pro"],
             },
         },
         "upgrade_url": settings.upgrade_url,
@@ -74,6 +74,7 @@ def build_mcp_manifest() -> dict:
             "stripe_checkout": "/stripe/checkout",
             "stripe_webhook": "/stripe/webhook",
             "mcp_sse": "/mcp-sse/sse",
+            "mcp_http": "/mcp/mcp",
         },
-        "connector_url": f"{settings.public_base_url}/mcp-sse/sse",
+        "connector_url": f"{settings.public_base_url.rstrip('/')}/mcp/mcp",
     }

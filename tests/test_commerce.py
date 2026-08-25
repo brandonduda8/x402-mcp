@@ -112,5 +112,5 @@ def test_quota_exceeded_includes_credits_purchase_tools(store: InMemoryQuotaStor
     with pytest.raises(QuotaExceededError) as exc:
         store.consume_quota(agent)
 
-    assert exc.value.detail["purchase_credits_tool"] == "purchase_tool_credits"
-    assert exc.value.detail["credits_payment_tool"] == "get_tool_credits_requirements"
+    assert exc.value.detail["purchase_credits_tool"] == "commerce.purchase_credits"
+    assert exc.value.detail["credits_payment_tool"] == "commerce.credits_requirements"

@@ -111,4 +111,4 @@ def test_http_os_history() -> None:
 
 
 def test_tool_registered() -> None:
-    assert "get_os_metrics" in EXPECTED_TOOL_NAMES
+    assert "ops.metrics" in EXPECTED_TOOL_NAMES

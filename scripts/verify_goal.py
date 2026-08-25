@@ -259,7 +259,7 @@ async def run_pro_stdio_evidence() -> None:
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            result = await session.call_tool("get_pro_upgrade_requirements", {})
+            result = await session.call_tool("commerce.pro_requirements", {})
     text = result.content[0].text if result.content else "{}"
     out.write_text(text, encoding="utf-8")
 
