@@ -1744,9 +1744,32 @@ _MCP_CORS = dict(
     expose_headers=["Mcp-Session-Id", "Last-Event-Id"],
 )
 
+_MCP_ACCEPT = b"application/json, text/event-stream"
+
+
+class McpAcceptCompatMiddleware:
+    """Smithery and some MCP clients send Accept: application/json (or */*).
+
+    FastMCP Streamable HTTP returns 406 unless BOTH application/json and
+    text/event-stream are listed. Rewrite the header so hosted gateways can
+    initialize and call tools/list instead of 502ing.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            headers = [(k, v) for k, v in scope.get("headers", []) if k != b"accept"]
+            headers.append((b"accept", _MCP_ACCEPT))
+            scope = {**scope, "headers": headers}
+        await self.app(scope, receive, send)
+
+
 # Mount MCP Streamable HTTP / SSE transport when available.
 if _mcp_http_app is not None:
     _mcp_http_app.add_middleware(CORSMiddleware, **_MCP_CORS)
+    _mcp_http_app.add_middleware(McpAcceptCompatMiddleware)
     app.mount("/mcp", _mcp_http_app)
 
 try:

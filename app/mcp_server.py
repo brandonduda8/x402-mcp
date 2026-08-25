@@ -100,7 +100,7 @@ def _transport_security() -> TransportSecuritySettings:
     Smithery's gateway and playground send Host/Origin of smithery.ai /
     *.run.tools. Those must be allowlisted or initialize/tools/list 403/421.
     """
-    allowed = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    allowed = ["127.0.0.1:*", "localhost:*", "[::1]:*", "testserver", "testserver:*"]
     origins = [
         "http://localhost:*",
         "http://127.0.0.1:*",
