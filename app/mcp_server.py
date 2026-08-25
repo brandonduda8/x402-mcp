@@ -135,6 +135,11 @@ mcp = FastMCP(
     "x402-micropayments",
     instructions=INSTRUCTIONS,
     transport_security=_transport_security(),
+    # JSON bodies (not SSE) so Smithery Connect and other HTTP gateways can
+    # parse initialize/tools/list. Stateless so proxies that drop
+    # Mcp-Session-Id still work for a single request.
+    json_response=True,
+    stateless_http=True,
 )
 
 
