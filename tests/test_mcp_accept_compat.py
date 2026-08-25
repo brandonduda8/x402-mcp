@@ -31,3 +31,6 @@ def test_json_only_accept_initializes_instead_of_406() -> None:
     assert "Not Acceptable" not in response.text
     assert response.status_code == 200
     assert "x402-micropayments" in response.text
+    # json_response=True: body is JSON, not an SSE event stream.
+    payload = response.json()
+    assert payload["result"]["serverInfo"]["name"] == "x402-micropayments"
